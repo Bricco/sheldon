@@ -2,6 +2,8 @@
 
 ARGV="$@"
 
+check_dependendcies
+
 if [ "x$ARGV" = "x" ] ; then
     ARGV="-h"
 fi
@@ -29,6 +31,241 @@ usage
 if [[ ${#@} -ne 2 &&  "$1" != "upgrade" ]]; then
   usage;
 fi
+
+## READ PROPERTIES
+if [ -e "properties" ]
+then
+. properties
+else
+  echo "properties file must exist!"
+  exit 
+fi
+
+
+PROJECT=${PROJECT:-"$(basename $(pwd))"}
+PROJECT_LOCATION="$(pwd)"
+
+DATABASE=${DATABASE:-"$PROJECT"}
+DATABASE_USER=${DATABASE_USER:-"$DATABASE"}
+DATABASE_PASS=${DATABASE_PASS:-"secret"}
+SITE_URL="dev.$PROJECT.se"
+
+
+function check_dependendcies{
+	
+	DEPENDENCIES=(drush apache2 mysql-server php5-mysql git)
+
+	# What dependencies are missing?
+	PKGSTOINSTALL=""
+
+	for DEPENDENCIE in ${DEPENDENCIES[*]} 
+	do
+			if [[ ! `dpkg -l | grep -w "ii  $DEPENDENCIE "` ]]; then
+				PKGSTOINSTALL="$PKGSTOINSTALL $DEPENDENCIE"
+			fi
+	done
+
+	# If some dependencies are missing, asks if user wants to install
+	if [ "$PKGSTOINSTALL" != "" ]; then
+		echo -n "Some dependencies are missing. Want to install them? (Y/n): "
+		read SURE
+		# If user want to install missing dependencies
+		if [[ $SURE = "Y" || $SURE = "y" || $SURE = "" ]]; then
+			# Debian, Ubuntu and derivatives (with apt-get)
+			if which apt-get &> /dev/null; then
+				sudo apt-get install $PKGSTOINSTALL
+		
+			else
+				echo "ERROR: impossible to found a package manager in your system. Please, install manually $PKGSTOINSTALL}."
+			fi
+		
+		# Else, if user don't want to install missing dependencies
+		else
+			echo "WARNING: Some dependencies may be missing. So, please, install manually $PKGSTOINSTALL}."
+			exit;
+		fi
+	fi
+}
+
+function mysql_root_access{
+	read -sp "MYSQL root password: " MYSQL_ROOT_PASS
+	echo
+
+	if [ $MYSQL_ROOT_PASS ] 
+	then
+		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+	fi
+}
+
+
+function install_drupal {
+	
+	if [ ! -e "$PROJECT.make" ]
+	then
+	  echo "$PROJECT.make file must exist!"
+	  exit;
+	fi
+
+	read -ep "DEPLOY DIR?: " -i "/var/www" DEPLOY_DIR
+	mysql_root_access
+
+	VHOST="<VirtualHost *:80>
+	ServerName $SITE_URL"
+
+	for SITE in "$PROJECT_LOCATION/sites/*"
+	do
+		SITE_NAME="$(basename $SITE)"
+		if [[ $SITE_NAME == "default" || $SITE_NAME == "all" ]]
+		then
+	  	  continue
+		else	
+		  SITE_URL="$SITE_URL dev.$SITE_NAME"
+		  VHOST="$VHOST
+		  ServerAlias dev.$SITE_NAME"
+		fi
+	done
+
+	echo "$VHOST
+	DocumentRoot $DEPLOY_DIR/$PROJECT/
+
+		<Directory />
+		        Options FollowSymLinks
+		        AllowOverride All
+		</Directory>
+		<Directory $DEPLOY_DIR/$PROJECT>
+		        Options +Indexes +FollowSymLinks +MultiViews +ExecCGI
+		        AllowOverride All
+		        Order allow,deny
+		        allow from all
+		</Directory>
+		ErrorLog /var/log/apache2/$PROJECT-error.log
+		LogLevel warn
+		CustomLog /var/log/apache2/$PROJECT.log combined
+
+	</VirtualHost>" | sudo tee /etc/apache2/sites-enabled/$PROJECT.conf > /dev/null
+
+	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts
+
+	if [ $? -eq 0 ]
+	then 
+	  echo "$SITE_URL allready exists in host file, didn't add anything"
+	else
+	   echo "Adding $SITE_URL to /etc/hosts"
+	   echo -e "\n127.0.0.1 $SITE_URL\n" | sudo tee --append /etc/hosts
+	fi
+
+
+	for DB in $DATABASE
+	do
+	  mysql -u root -e $MYSQL_ROOT_PASS "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';"
+	done
+
+	## DRUSH MAKE
+	sudo rm -rf /tmp/$PROJECT
+	drush make *.make /tmp/$PROJECT
+
+	## COPY CUSTOM PROFILES
+	sudo cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" || true
+
+	## COPY SITES
+	sudo cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true
+
+	## COPY FILES
+	for SITE in $PROJECT_LOCATION/sites/*
+	do
+		SITE_NAME="$(basename $SITE)"
+
+		if [ $SITE_NAME != "all" ]
+		then
+			sudo mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
+			sudo mv "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME/files" "/tmp/$PROJECT/sites/$SITE_NAME/" || true	
+		
+			## MAKE SURE FILES FOLDER IS WRITABLE
+			sudo chown -R www-data "/tmp/$PROJECT/sites/$SITE_NAME/files"
+			## FILTER SETTINGS.PHP
+			REPLACE=($DATABASE $DATABASE_USER $DATABASE_HOST $DATABASE_PASS "DEV"); $i= 0;
+			for SEARCH in "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@"
+			do
+				COMMAND="$COMMAND | sed s/$SEARCH/${REPLACE[$i]}/g"; $i++;
+			done
+			cat $SITE/settings.php $COMMAND | sudo tee /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null
+	
+		fi
+	
+	done
+
+	## REPLACE OLD PROJECT // MABY RSYNC IS A BETTER METHOD?
+	sudo rm -rf $DEPLOY_DIR/$PROJECT
+	sudo mv /tmp/$PROJECT "$DEPLOY_DIR/"
+
+	## MAKE SURE THESE FOLDERS EXISTS
+	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
+	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
+
+	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
+	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules"; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
+	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes"; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
+
+	echo -e "Restarting apache...\n"
+	sudo apache2ctl restart > /dev/null
+
+}
+
+
+function content_update { 
+	mysql_root_access
+
+	DATESTAMP=$(date +%s)
+	CONNECTION="--user=$TEST_DATABASE_USER --host=$TEST_DATABASE_HOST --password=$TEST_DATABASE_PASS"
+	OPTIONS="--no-autocommit --single-transaction --opt -Q"
+	
+	for(( i=0; i<${#$DATABASE[@]}; i++ ))
+	do
+		echo "Running mysqldump command on server..."
+
+		TABLES=$(ssh $TEST_USER@$TEST_HOST "mysql $CONNECTION -D ${TEST_DATABASE[i]} -Bse \"SHOW TABLES\"")
+
+
+		for T in $TABLES
+		do
+			case "$T" in 
+			  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
+			  *search_*|*cache_*|*watchdog|*history|*sessions)
+			    EMPTY_TABLES="$EMPTY_TABLES $T"
+			    ;;
+			  *)
+			    DATA_TABLES="$DATA_TABLES $T"
+			    ;;
+			esac		
+		done
+
+
+		QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION ${TEST_DATABASE[i]} $DATA_TABLES > /var/tmp/$PROJECT.sql-$DATESTAMP"
+		QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${TEST_DATABASE[i]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
+		QUERY="$QUERY && mv -f /var/tmp/$PROJECT.sql-$DATESTAMP /var/tmp/$PROJECT.sql"
+
+		ssh $TEST_USER@$TEST_HOST $QUERY;
+
+		echo "Downloading sql-dump-file from server..."
+		rsync -akzv --stats --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
+
+		echo "Importing sql-dump-file to local database"
+
+		DROP_CREATE="DROP DATABASE IF EXISTS $DATABASE; CREATE DATABASE $DATABASE /*!40100 DEFAULT CHARACTER SET utf8 */;"
+		DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON $DATABASE.* TO '$DATABASE_USER'@'localhost' IDENTIFIED BY '$DATABASE_PASS'; FLUSH PRIVILEGES;"
+
+		echo $DROP_CREATE | mysql --database=information_schema --host=$DATABASE_HOST --user=root $MYSQL_ROOT_PASS; 
+
+		if [[ `dpkg -l | grep -w "ii  pv "` ]]; then
+			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent
+		else
+			mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent < /var/tmp/$PROJECT.sql
+		fi
+	
+	
+		echo "complete!"
+	done
+}
 
 
 case $ARGV in
