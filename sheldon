@@ -1,0 +1,48 @@
+#!/bin/bash
+
+ARGV="$@"
+
+if [ "x$ARGV" = "x" ] ; then
+    ARGV="-h"
+fi
+
+
+function usage {
+    echo "
+Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
+COMMANDS
+    install		Installs Drupal locally or remotely.
+    	--target=path		Where to install locally. Defaults to current directory.
+    	--env=[TEST|PROD]	Where to install remotely. 
+
+    create		Creates a fully functional Drupal project. Includes setting up database and Apache config.
+    	--name=projectname	The name of the project.
+
+    content-update	Updates local content from test or prod environment
+    	--from=[TEST|PROD]	Where to get the content.	
+"
+    exit 0
+}
+
+usage
+
+if [[ ${#@} -ne 2 &&  "$1" != "upgrade" ]]; then
+  usage;
+fi
+
+
+case $ARGV in
+start)
+    run_launchctl load -w $LAUNCHD_JOB
+    ERROR=$?
+    ;;
+stop|graceful-stop)
+    run_launchctl unload -w $LAUNCHD_JOB
+    ERROR=$?
+    ;;
+*)
+    $HTTPD $ARGV
+    ERROR=$?
+esac
+
+exit $ERROR
