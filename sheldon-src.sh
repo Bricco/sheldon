@@ -50,13 +50,15 @@ SITE_URL="dev.$PROJECT.se"
 
 
 function mysql_root_access {
-	
+  if [[ -z "$MYSQL_ROOT_PASS" ]]
+  then
 	read -sp "MYSQL root password: " MYSQL_ROOT_PASS
 	echo;echo;
 	if [ $MYSQL_ROOT_PASS ] 
 	then
 		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
 	fi
+  fi
 }
 
 function exclude_files {
@@ -249,7 +251,7 @@ function content_update {
 	do
 		echo "Running mysqldump command on server..."
 
-		TABLES=$(ssh $TEST_USER@$TEST_HOST "mysql $CONNECTION -D ${TEST_DATABASE[i]} -Bse \"SHOW TABLES\"")
+		TABLES=$(ssh -q $TEST_USER@$TEST_HOST "mysql $CONNECTION -D ${TEST_DATABASE[i]} -Bse \"SHOW TABLES\"")
 
 
 		for T in $TABLES
@@ -270,10 +272,10 @@ function content_update {
 		QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${TEST_DATABASE[i]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
 		QUERY="$QUERY && mv -f /var/tmp/$PROJECT.sql-$DATESTAMP /var/tmp/$PROJECT.sql"
 
-		ssh $TEST_USER@$TEST_HOST $QUERY;
+		ssh -q $TEST_USER@$TEST_HOST $QUERY;
 
 		echo "Downloading sql-dump-file from server..."
-		rsync -akzv --stats --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
+		rsync -akzq --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
 
 		echo "Updateing local database"
 
