@@ -77,7 +77,7 @@ function exclude_files {
 function build_drupal {
 
 	## DRUSH MAKE
-	echo "Downloading and bulding $PROJECT.make, this can take a while..."
+	echo "Bulding $PROJECT.make, this can take a while..."
 	sudo rm -rf /tmp/$PROJECT
 	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
 
@@ -98,6 +98,7 @@ function build_drupal {
 
 		if [ $SITE_NAME != "all" ]
 		then
+			echo "Copy and filter sites/$SITE_NAME/settings.php"
 			mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
 			cp $SITE/settings.php /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null 2>&1
 			
@@ -113,6 +114,8 @@ function build_drupal {
 }
 
 function apache_install {
+
+	echo "Creating apache config file: /etc/apache2/sites-enabled/$PROJECT.conf"
 	
 	VHOST="<VirtualHost *:80>
 	ServerName $SITE_URL"
@@ -148,6 +151,8 @@ function apache_install {
 		CustomLog /var/log/apache2/$PROJECT.log combined
 
 	</VirtualHost>" | sudo tee /etc/apache2/sites-enabled/$PROJECT.conf > /dev/null
+
+	echo "Adding $SITE_URL to /etc/hosts"
 
 	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts
 
@@ -195,6 +200,10 @@ function install_drupal {
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
+	
+	echo "Creating symlinks into workspace..."
+	echo "$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
+	echo "$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
 
 	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
@@ -202,8 +211,10 @@ function install_drupal {
 	
 	sudo chown -R $USER:$USER "$DEPLOY_DIR/$PROJECT"
 
+	echo "BUILD successfull"
+
 	read -ep "Do you want to update the database? 
-		  (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
+(P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
 
 	if [ $UPDATE == "T" ]
 	then
