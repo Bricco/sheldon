@@ -292,7 +292,7 @@ deploy)
    deploy
     ;;
 *)
-help
+usage
 esac
 
 exit $ERROR
