@@ -202,7 +202,8 @@ function install_drupal {
 	
 	sudo chown -R $USER:$USER "$DEPLOY_DIR/$PROJECT"
 
-	read -ep "Do you want to update the database? (P = from PROD, T from TEST, n = No) [P/T/n]" UPDATE
+	read -ep "Do you want to update the database? 
+		  (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
 
 	if [ $UPDATE == "T" ]
 	then
@@ -215,6 +216,7 @@ function install_drupal {
 
 
 function deploy { 
+
 	build_drupal;
 	exclude_files;
 
