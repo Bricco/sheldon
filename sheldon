@@ -85,10 +85,13 @@ function exclude_files {
 function build_drupal {
 
 	## DRUSH MAKE
-	echo "Bulding $PROJECT.make, this can take a while..."
+	echo "Downloading and bulding $PROJECT.make, this can take a while..."
 	sudo rm -rf /tmp/$PROJECT
 	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
-	#drush make $PROJECT.make /tmp/$PROJECT  > /dev/null
+
+	echo "Drush make complete."
+
+	echo "Copy custom profiles, modules, themes etc..."
 
 	## COPY CUSTOM PROFILES
 	cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
@@ -158,10 +161,10 @@ function apache_install {
 
 	if [ $? -eq 0 ]
 	then 
-	  echo "$SITE_URL allready exists in host file, didn't add anything";echo;
+	  echo "$SITE_URL allready exists in host file, didn't add anything";
 	else
 	   echo "Adding $SITE_URL to /etc/hosts"
-	   echo -e "\n127.0.0.1 $SITE_URL\n" | sudo tee --append /etc/hosts > /dev/null 2>&1
+	   echo -e "\n127.0.0.1 $SITE_URL\n" >> /etc/hosts
 	fi
 
 	echo -e "Restarting apache...\n"
