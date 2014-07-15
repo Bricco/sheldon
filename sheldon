@@ -1,8 +1,15 @@
 #!/bin/bash
 
-ARGV="$@"
+BASEDIR=$(dirname $0)
 
-check_dependendcies
+echo "Upgrading sheldon to the latest version..."
+cd /tmp
+sudo wget -q https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon
+sudo mv /tmp/sheldon $BASEDIR
+sudo chmod +x $BASEDIR/sheldon
+cd - > /dev/null
+
+ARGV="$@"
 
 if [ "x$ARGV" = "x" ] ; then
     ARGV="-h"
@@ -26,11 +33,10 @@ COMMANDS
     exit 0
 }
 
-usage
 
-if [[ ${#@} -ne 2 &&  "$1" != "upgrade" ]]; then
-  usage;
-fi
+#if [[ ${#@} -ne 2 &&  "$1" != "upgrade" ]]; then
+#  usage;
+#fi
 
 ## READ PROPERTIES
 if [ -e "properties" ]
@@ -51,46 +57,10 @@ DATABASE_PASS=${DATABASE_PASS:-"secret"}
 SITE_URL="dev.$PROJECT.se"
 
 
-function check_dependendcies{
+function mysql_root_access {
 	
-	DEPENDENCIES=(drush apache2 mysql-server php5-mysql git)
-
-	# What dependencies are missing?
-	PKGSTOINSTALL=""
-
-	for DEPENDENCIE in ${DEPENDENCIES[*]} 
-	do
-			if [[ ! `dpkg -l | grep -w "ii  $DEPENDENCIE "` ]]; then
-				PKGSTOINSTALL="$PKGSTOINSTALL $DEPENDENCIE"
-			fi
-	done
-
-	# If some dependencies are missing, asks if user wants to install
-	if [ "$PKGSTOINSTALL" != "" ]; then
-		echo -n "Some dependencies are missing. Want to install them? (Y/n): "
-		read SURE
-		# If user want to install missing dependencies
-		if [[ $SURE = "Y" || $SURE = "y" || $SURE = "" ]]; then
-			# Debian, Ubuntu and derivatives (with apt-get)
-			if which apt-get &> /dev/null; then
-				sudo apt-get install $PKGSTOINSTALL
-		
-			else
-				echo "ERROR: impossible to found a package manager in your system. Please, install manually $PKGSTOINSTALL}."
-			fi
-		
-		# Else, if user don't want to install missing dependencies
-		else
-			echo "WARNING: Some dependencies may be missing. So, please, install manually $PKGSTOINSTALL}."
-			exit;
-		fi
-	fi
-}
-
-function mysql_root_access{
 	read -sp "MYSQL root password: " MYSQL_ROOT_PASS
-	echo
-
+	echo;echo;
 	if [ $MYSQL_ROOT_PASS ] 
 	then
 		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
@@ -99,6 +69,8 @@ function mysql_root_access{
 
 
 function install_drupal {
+
+	echo "Start installing $PROJECT"
 	
 	if [ ! -e "$PROJECT.make" ]
 	then
@@ -148,10 +120,10 @@ function install_drupal {
 
 	if [ $? -eq 0 ]
 	then 
-	  echo "$SITE_URL allready exists in host file, didn't add anything"
+	  echo "$SITE_URL allready exists in host file, didn't add anything";echo;
 	else
 	   echo "Adding $SITE_URL to /etc/hosts"
-	   echo -e "\n127.0.0.1 $SITE_URL\n" | sudo tee --append /etc/hosts
+	   echo -e "\n127.0.0.1 $SITE_URL\n" | sudo tee --append /etc/hosts > /dev/null 2>&1
 	fi
 
 
@@ -161,14 +133,16 @@ function install_drupal {
 	done
 
 	## DRUSH MAKE
+	echo "Bulding $PROJECT.make, this can take a while..."
 	sudo rm -rf /tmp/$PROJECT
-	drush make *.make /tmp/$PROJECT
+	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
+	#drush make $PROJECT.make /tmp/$PROJECT  > /dev/null
 
 	## COPY CUSTOM PROFILES
-	sudo cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" || true
+	sudo cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
 
 	## COPY SITES
-	sudo cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true
+	sudo cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true > /dev/null 2>&1
 
 	## COPY FILES
 	for SITE in $PROJECT_LOCATION/sites/*
@@ -178,17 +152,19 @@ function install_drupal {
 		if [ $SITE_NAME != "all" ]
 		then
 			sudo mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
-			sudo mv "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME/files" "/tmp/$PROJECT/sites/$SITE_NAME/" || true	
+			sudo mv "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME/files" "/tmp/$PROJECT/sites/$SITE_NAME/" || true	> /dev/null 2>&1
 		
-			## MAKE SURE FILES FOLDER IS WRITABLE
-			sudo chown -R www-data "/tmp/$PROJECT/sites/$SITE_NAME/files"
+			## MAKE SURE FILES FOLDER IS WRITABLE BY GROUP
+			sudo chmod -R 775 "/tmp/$PROJECT/sites/$SITE_NAME/files"
+			sudo cp $SITE/settings.php /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null 2>&1
+			
 			## FILTER SETTINGS.PHP
-			REPLACE=($DATABASE $DATABASE_USER $DATABASE_HOST $DATABASE_PASS "DEV"); $i= 0;
-			for SEARCH in "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@"
+			REPLACE=($DATABASE $DATABASE_USER $DATABASE_HOST $DATABASE_PASS "DEV"); i=0;
+			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
 			do
-				COMMAND="$COMMAND | sed s/$SEARCH/${REPLACE[$i]}/g"; $i++;
+				sed -i s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/settings.php; ((i++));
 			done
-			cat $SITE/settings.php $COMMAND | sudo tee /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null
+	
 	
 		fi
 	
@@ -203,11 +179,15 @@ function install_drupal {
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
 
 	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
-	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules"; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
-	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes"; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
+	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
+	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
+	
+	sudo chown -R $USER:$USER "$DEPLOY_DIR/$PROJECT"
 
 	echo -e "Restarting apache...\n"
-	sudo apache2ctl restart > /dev/null
+	sudo apache2ctl restart > /dev/null 2>&1
+
+	echo "You can now visit http://dev.byggindustrin.se"
 
 }
 
@@ -219,7 +199,7 @@ function content_update {
 	CONNECTION="--user=$TEST_DATABASE_USER --host=$TEST_DATABASE_HOST --password=$TEST_DATABASE_PASS"
 	OPTIONS="--no-autocommit --single-transaction --opt -Q"
 	
-	for(( i=0; i<${#$DATABASE[@]}; i++ ))
+	for(( i=0; i<${#DATABASE[@]}; i++ ))
 	do
 		echo "Running mysqldump command on server..."
 
@@ -269,17 +249,14 @@ function content_update {
 
 
 case $ARGV in
-start)
-    run_launchctl load -w $LAUNCHD_JOB
-    ERROR=$?
+install)
+   install_drupal
     ;;
-stop|graceful-stop)
-    run_launchctl unload -w $LAUNCHD_JOB
-    ERROR=$?
+update)
+   content_update
     ;;
 *)
-    $HTTPD $ARGV
-    ERROR=$?
+help
 esac
 
 exit $ERROR
