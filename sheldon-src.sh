@@ -50,7 +50,7 @@ SITE_URL="dev.$PROJECT.se"
 
 
 function mysql_root_access {
-  if [[ -z "$MYSQL_ROOT_PASS" ]]
+  if [[ -z "$MYSQL_ROOT_PASS_HAS_RUN" ]]
   then
 	read -sp "MYSQL root password: " MYSQL_ROOT_PASS
 	echo;echo;
@@ -58,6 +58,8 @@ function mysql_root_access {
 	then
 		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
 	fi
+	
+	MYSQL_ROOT_PASS_HAS_RUN=1
   fi
 }
 
@@ -275,7 +277,7 @@ function content_update {
 		ssh -q $TEST_USER@$TEST_HOST $QUERY;
 
 		echo "Downloading sql-dump-file from server..."
-		rsync -akzq --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
+		rsync -akz --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
 
 		echo "Updateing local database"
 
