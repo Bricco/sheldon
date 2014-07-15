@@ -4,7 +4,7 @@ BASEDIR=$(dirname $0)
 
 echo "Upgrading sheldon to the latest version..."
 cd /tmp
-sudo wget -q https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon
+wget -q https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon
 sudo mv /tmp/sheldon $BASEDIR
 sudo chmod +x $BASEDIR/sheldon
 cd - > /dev/null
@@ -157,7 +157,7 @@ function apache_install {
 
 	</VirtualHost>" | sudo tee /etc/apache2/sites-enabled/$PROJECT.conf > /dev/null
 
-	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts > /dev/null 2>&1
+	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts
 
 	if [ $? -eq 0 ]
 	then 
@@ -220,8 +220,8 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT $EXCLUDE
-
+	#rsync --delete --cvs-exclude -akz /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT $EXCLUDE
+	echo "/tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT $EXCLUDE";
 	rm -rf /tmp/$PROJECT
 	
 }
@@ -289,6 +289,9 @@ install)
     ;;
 update)
    content_update
+    ;;
+deploy)
+   deploy
     ;;
 *)
 help
