@@ -50,7 +50,7 @@ SITE_URL="dev.$PROJECT.se"
 
 
 function mysql_root_access {
-  if [[ -z "$MYSQL_ROOT_PASS_HAS_RUN" ]]
+  if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]
   then
 	read -sp "MYSQL root password: " MYSQL_ROOT_PASS
 	echo;echo;
