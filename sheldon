@@ -67,20 +67,58 @@ function mysql_root_access {
 	fi
 }
 
+function exclude_files {
 
-function install_drupal {
+	for SITE in $PROJECT_LOCATION/sites/*
+	do
+		SITE_NAME="$(basename $SITE)"
 
-	echo "Start installing $PROJECT"
+		if [ $SITE_NAME != "all" ]
+		then
+			EXCLUDE="$EXCLUDE --exclude=\"sites/$SITE_NAME/files\""
 	
-	if [ ! -e "$PROJECT.make" ]
-	then
-	  echo "$PROJECT.make file must exist!"
-	  exit;
-	fi
+		fi
+	
+	done
+}
 
-	read -ep "DEPLOY DIR?: " -i "/var/www" DEPLOY_DIR
-	mysql_root_access
+function build_drupal {
 
+	## DRUSH MAKE
+	echo "Bulding $PROJECT.make, this can take a while..."
+	sudo rm -rf /tmp/$PROJECT
+	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
+	#drush make $PROJECT.make /tmp/$PROJECT  > /dev/null
+
+	## COPY CUSTOM PROFILES
+	cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
+
+	## COPY SITES
+	cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true > /dev/null 2>&1
+
+	## COPY FILES
+	for SITE in $PROJECT_LOCATION/sites/*
+	do
+		SITE_NAME="$(basename $SITE)"
+
+		if [ $SITE_NAME != "all" ]
+		then
+			mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
+			cp $SITE/settings.php /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null 2>&1
+			
+			## FILTER SETTINGS.PHP
+			REPLACE=($DATABASE $DATABASE_USER $DATABASE_HOST $DATABASE_PASS "DEV"); i=0;
+			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
+			do
+				sed -i s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/settings.php; ((i++));
+			done
+		fi
+	done
+
+}
+
+function apache_install {
+	
 	VHOST="<VirtualHost *:80>
 	ServerName $SITE_URL"
 
@@ -126,53 +164,38 @@ function install_drupal {
 	   echo -e "\n127.0.0.1 $SITE_URL\n" | sudo tee --append /etc/hosts > /dev/null 2>&1
 	fi
 
+	echo -e "Restarting apache...\n"
+	sudo apache2ctl restart > /dev/null 2>&1
+}
 
-	for DB in $DATABASE
+function mysql_install {
+	
+	for DB in $(echo ${DATABASE[*]} | tr " " "\n")
 	do
 	  mysql -u root -e $MYSQL_ROOT_PASS "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';"
 	done
 
-	## DRUSH MAKE
-	echo "Bulding $PROJECT.make, this can take a while..."
-	sudo rm -rf /tmp/$PROJECT
-	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
-	#drush make $PROJECT.make /tmp/$PROJECT  > /dev/null
+}
 
-	## COPY CUSTOM PROFILES
-	sudo cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
+function install_drupal {
 
-	## COPY SITES
-	sudo cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true > /dev/null 2>&1
-
-	## COPY FILES
-	for SITE in $PROJECT_LOCATION/sites/*
-	do
-		SITE_NAME="$(basename $SITE)"
-
-		if [ $SITE_NAME != "all" ]
-		then
-			sudo mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
-			sudo mv "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME/files" "/tmp/$PROJECT/sites/$SITE_NAME/" || true	> /dev/null 2>&1
-		
-			## MAKE SURE FILES FOLDER IS WRITABLE BY GROUP
-			sudo chmod -R 775 "/tmp/$PROJECT/sites/$SITE_NAME/files"
-			sudo cp $SITE/settings.php /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null 2>&1
-			
-			## FILTER SETTINGS.PHP
-			REPLACE=($DATABASE $DATABASE_USER $DATABASE_HOST $DATABASE_PASS "DEV"); i=0;
-			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
-			do
-				sed -i s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/settings.php; ((i++));
-			done
+	echo "Start installing $PROJECT"
 	
-	
-		fi
-	
-	done
+	if [ ! -e "$PROJECT.make" ]
+	then
+	  echo "$PROJECT.make file must exist!"
+	  exit;
+	fi
 
-	## REPLACE OLD PROJECT // MABY RSYNC IS A BETTER METHOD?
-	sudo rm -rf $DEPLOY_DIR/$PROJECT
-	sudo mv /tmp/$PROJECT "$DEPLOY_DIR/"
+	read -ep "DEPLOY DIR?: " -i "/var/www" DEPLOY_DIR
+	
+	mysql_root_access;
+	apache_install;
+	mysql_install;
+	build_drupal;
+
+	#RSYNC with delete,
+	rsync --delete --cvs-exclude -akz /tmp/$PROJECT "$DEPLOY_DIR/$PROJECT" $EXCLUDE
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
@@ -183,12 +206,21 @@ function install_drupal {
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
 	
 	sudo chown -R $USER:$USER "$DEPLOY_DIR/$PROJECT"
+	
+	echo "You can now visit http://dev.$PROJECT.se"
 
-	echo -e "Restarting apache...\n"
-	sudo apache2ctl restart > /dev/null 2>&1
+}
 
-	echo "You can now visit http://dev.byggindustrin.se"
 
+function deploy { 
+	build_drupal;
+	exclude_files;
+
+	#RSYNC with delete,
+	rsync --delete --cvs-exclude -akz /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT $EXCLUDE
+
+	rm -rf /tmp/$PROJECT
+	
 }
 
 
@@ -229,7 +261,7 @@ function content_update {
 		echo "Downloading sql-dump-file from server..."
 		rsync -akzv --stats --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
 
-		echo "Importing sql-dump-file to local database"
+		echo "Updateing local database"
 
 		DROP_CREATE="DROP DATABASE IF EXISTS $DATABASE; CREATE DATABASE $DATABASE /*!40100 DEFAULT CHARACTER SET utf8 */;"
 		DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON $DATABASE.* TO '$DATABASE_USER'@'localhost' IDENTIFIED BY '$DATABASE_PASS'; FLUSH PRIVILEGES;"
