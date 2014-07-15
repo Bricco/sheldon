@@ -226,6 +226,7 @@ function install_drupal {
 	fi
 	
 	echo "You can now visit http://dev.$PROJECT.se"
+	echo "Bazinga!"
 
 }
 
