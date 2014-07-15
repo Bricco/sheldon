@@ -157,7 +157,7 @@ function apache_install {
 
 	</VirtualHost>" | sudo tee /etc/apache2/sites-enabled/$PROJECT.conf > /dev/null
 
-	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts
+	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts > /dev/null 2>&1
 
 	if [ $? -eq 0 ]
 	then 
