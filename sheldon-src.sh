@@ -197,6 +197,7 @@ function install_drupal {
 	apache_install;
 	mysql_install;
 	build_drupal;
+	exclude_files;
 
 	#RSYNC with delete,
 	rsync --delete --cvs-exclude -akz /tmp/$PROJECT "$DEPLOY_DIR/" $EXCLUDE
