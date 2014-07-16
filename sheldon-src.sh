@@ -121,7 +121,6 @@ function build_drupal {
 	## COPY SITES
 	cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true > /dev/null 2>&1
 
-	## COPY FILES
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
 		SITE_NAME="$(basename $SITE)"
@@ -258,8 +257,31 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	echo "yes" ssh $TEST_USER@$TEST_HOST
 	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:"$(dirname $TEST_ROOT)/"
+
+	for SITE in $PROJECT_LOCATION/sites/*
+	do
+		SITE_NAME="$(basename $SITE)"
+
+		if [ $SITE_NAME != "all" ]
+		then
+			DRUSH_CMD="drush -l $SITE_NAME -r $TEST_ROOT"
+
+			COMMAND="echo 'Put $SITE_NAME in maintenance mode' && $DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
+			COMMAND="$COMMAND && echo 'Disable elysia cron' && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+			COMMAND="$COMMAND && echo 'Revert all features' &&  $DRUSH_CMD fra --yes"
+			COMMAND="$COMMAND && echo 'Run all updates' &&  $DRUSH_CMD updb --yes"
+			COMMAND="$COMMAND && echo 'Turn off maintenance mode' &&  $DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes"
+			COMMAND="$COMMAND && echo 'Enable elysia cron' &&  $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+			COMMAND="$COMMAND && echo 'Clear all cache' && $DRUSH_CMD cc all"
+
+			ssh $TEST_USER@$TEST_HOST "$COMMAND"
+			
+			echo "Sleep for 15 sec" 			
+			sleep 15
+		fi
+	done
+	
 	rm -rf /tmp/$PROJECT
 	
 }
