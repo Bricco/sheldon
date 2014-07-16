@@ -7,6 +7,10 @@ if [ "x$ARGV" = "x" ] ; then
     ARGV="-h"
 fi
 
+if [[ $EUID -eq 0 ]]; then
+   echo "This script should NOT be run as root" 1>&2
+   exit 1
+fi
 
 function usage {
     echo "
@@ -48,18 +52,30 @@ DATABASE_USER=${DATABASE_USER:-"$DATABASE"}
 DATABASE_PASS=${DATABASE_PASS:-"secret"}
 SITE_URL="dev.$PROJECT.se"
 
+APACHE_CMD=apache2ctl
+APACHE_VHOSTS_DIR=/etc/apache2/sites-enabled
+
+if [ "$(uname)" == "Darwin" ]; then
+  APACHE_CMD=apachectl
+  APACHE_VHOSTS_DIR=/etc/apache2/other
+fi
+
+
 
 function mysql_root_access {
   if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]
   then
-	read -sp "MYSQL root password: " MYSQL_ROOT_PASS
-	echo;echo;
-	if [ $MYSQL_ROOT_PASS ] 
-	then
-		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
-	fi
+    read -sp "Enter your MySQL password (ENTER for none): " MYSQL_ROOT_PASS
+    if [ -n "$MYSQL_ROOT_PASS" ]; then
+      while ! mysql -u root -p$MYSQL_ROOT_PASS  -e ";" ; do
+        read -p "Can't connect, please retry: " MYSQL_ROOT_PASS
+      done
+      MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+    else
+      $MYSQL_ROOT_PASS=""
+    fi
 	
-	MYSQL_ROOT_PASS_HAS_RUN=1
+    MYSQL_ROOT_PASS_HAS_RUN=1
   fi
 }
 
@@ -82,7 +98,7 @@ function build_drupal {
 
 	## DRUSH MAKE
 	echo "Bulding $PROJECT.make, this can take a while..."
-	sudo rm -rf /tmp/$PROJECT
+	rm -rf /tmp/$PROJECT || true
 	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
 
 	echo "Drush make complete."
@@ -154,7 +170,7 @@ function apache_install {
 		LogLevel warn
 		CustomLog /var/log/apache2/$PROJECT.log combined
 
-	</VirtualHost>" | sudo tee /etc/apache2/sites-enabled/$PROJECT.conf > /dev/null
+	</VirtualHost>" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null
 
 	echo "Adding $SITE_URL to /etc/hosts"
 
@@ -169,7 +185,7 @@ function apache_install {
 	fi
 
 	echo -e "Restarting apache...\n"
-	sudo apache2ctl restart > /dev/null 2>&1
+	sudo $APACHE_CMD restart > /dev/null 2>&1
 }
 
 function mysql_install {
@@ -278,7 +294,7 @@ function content_update {
 
 		ssh -q $TEST_USER@$TEST_HOST $QUERY;
 
-		echo "Downloading sql-dump-file from server..."
+		echo "Rsync sql-dump-file from server..."
 		rsync -akz --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
 
 		echo "Updateing local database"
