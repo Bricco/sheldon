@@ -220,7 +220,7 @@ function install_drupal {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $DEPLOY_DIR/$PROJEC
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $DEPLOY_DIR/
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
@@ -259,7 +259,7 @@ function deploy {
 
 	#RSYNC with delete,
 	echo "yes" ssh $TEST_USER@$TEST_HOST
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:"$(dirname $TEST_ROOT)/"
 	rm -rf /tmp/$PROJECT
 	
 }
