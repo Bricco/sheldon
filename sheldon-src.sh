@@ -254,7 +254,7 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT | yes
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT | echo "yes"
 	rm -rf /tmp/$PROJECT
 	
 }
