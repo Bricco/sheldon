@@ -34,7 +34,7 @@ COMMANDS
 #  usage;
 #fi
 
-PROJECT=${PROJECT:-"$(basename *.make .make)"}
+
 
 ## READ PROPERTIES
 if [ -e "properties" ]
@@ -44,6 +44,8 @@ else
   echo "properties file must exist!"
   exit 
 fi
+
+PROJECT=${PROJECT:-"$(basename *.make .make)"}
 
 if [ ! -e "$PROJECT.make" ]
 then
