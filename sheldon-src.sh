@@ -43,8 +43,14 @@ else
   exit 
 fi
 
+if [ ! -e "*.make" ]
+then
+  echo ".make file must exist!"
+  exit;
+fi
 
-PROJECT=${PROJECT:-"$(basename $(pwd))"}
+
+PROJECT=${PROJECT:-"$(basename *.make .make)"}
 PROJECT_LOCATION="$(pwd)"
 
 DATABASE=${DATABASE:-"$PROJECT"}
@@ -200,12 +206,6 @@ function mysql_install {
 function install_drupal {
 
 	echo "Start installing $PROJECT"
-	
-	if [ ! -e "$PROJECT.make" ]
-	then
-	  echo "$PROJECT.make file must exist!"
-	  exit;
-	fi
 
 	read -ep "DEPLOY DIR?: " -i "/var/www" DEPLOY_DIR
 	
@@ -254,7 +254,8 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT | echo "yes"
+	echo "yes" ssh $TEST_USER@$TEST_HOST
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT
 	rm -rf /tmp/$PROJECT
 	
 }
