@@ -71,7 +71,7 @@ function exclude_files {
 
 		if [ $SITE_NAME != "all" ]
 		then
-			EXCLUDE="$EXCLUDE --exclude=\"sites/$SITE_NAME/files\""
+			EXCLUDE="$EXCLUDE --exclude=sites/$SITE_NAME/files"
 	
 		fi
 	
@@ -200,7 +200,7 @@ function install_drupal {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz /tmp/$PROJECT "$DEPLOY_DIR/" $EXCLUDE
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $DEPLOY_DIR/$PROJEC
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
@@ -238,7 +238,7 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT $EXCLUDE
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT 
 	rm -rf /tmp/$PROJECT
 	
 }
