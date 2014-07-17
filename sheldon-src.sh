@@ -12,7 +12,6 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-
 ## READ PROPERTIES
 if [ -e "properties" ]
 then
@@ -224,7 +223,7 @@ function mysql_install {
 	
 	for DB in $(echo ${DATABASE[*]} | tr " " "\n")
 	do
-	  mysql -u root -e $MYSQL_ROOT_PASS "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';"
+	  mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';"
 	done
 
 }
@@ -312,6 +311,18 @@ function deploy {
 
 function content_update { 
 	mysql_root_access
+
+	if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 $TEST_USER@$TEST_HOST 'echo TRUE 2>&1') ]; then
+	echo -ep "Du verkar inta ha ssh-nycklar uppsatta till $TEST_HOST, vill du lägga till det? [Y/n]" ADD_KEYS
+		if [ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ] ;then
+
+			if [ ! -a ~/.ssh/id_dsa.pub ]; then
+			 	ssh-keygen -t dsa
+			fi
+			ssh-copy-id -i ~/.ssh/id_dsa.pub $TEST_USER@TEST_HOST
+		fi
+		
+	fi
 
 	DATESTAMP=$(date +%s)
 	CONNECTION="--user=$TEST_DATABASE_USER --host=$TEST_DATABASE_HOST --password=$TEST_DATABASE_PASS"
