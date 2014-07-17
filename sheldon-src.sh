@@ -12,29 +12,6 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-function usage {
-    echo "
-Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
-COMMANDS
-    install		Installs Drupal locally or remotely.
-    	--target=path		Where to install locally. Defaults to current directory.
-    	--env=[TEST|PROD]	Where to install remotely. 
-
-    create		Creates a fully functional Drupal project. Includes setting up database and Apache config.
-    	--name=projectname	The name of the project.
-
-    content-update	Updates local content from test or prod environment
-    	--from=[TEST|PROD]	Where to get the content.	
-"
-    exit 0
-}
-
-
-#if [[ ${#@} -ne 2 &&  "$1" != "upgrade" ]]; then
-#  usage;
-#fi
-
-
 
 ## READ PROPERTIES
 if [ -e "properties" ]
@@ -54,7 +31,25 @@ then
 fi
 
 
-PROJECT=${PROJECT:-"$(basename *.make .make)"}
+## READ ARGUMENTS
+TEMP=`getopt -o f:t:e:n: --longoptions env:,target:,from:,name:,test -n "sheldon" -- "$@"`
+
+if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+
+eval set -- "$TEMP"
+
+while true ; do
+	case "$1" in
+		-f|--from) echo "Option from, argument \`$2'" ; shift 2 ;;
+		-t|--target) echo "Option target, argument \`$2'" ; shift 2 ;;
+		-e|--env) echo "Option env, argument \`$2'" ; shift 2 ;;
+		-n|--name) echo "Option name, argument \`$2'" ; shift 2 ;;
+		--test) echo "Option test, argument \`$2'" ; shift 2 ;;
+		--) shift ; break ;;
+		*) echo "Internal error!" ; exit 1 ;;
+	esac
+done
+
 PROJECT_LOCATION="$(pwd)"
 
 DATABASE=${DATABASE:-"$PROJECT"}
@@ -70,21 +65,51 @@ if [ "$(uname)" == "Darwin" ]; then
   APACHE_VHOSTS_DIR=/etc/apache2/other
 fi
 
+exit;
 
+function usage {
+    echo "
+Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
+COMMANDS
+    install		Installs Drupal locally or remotely.
+    	--target=path		Where to install locally. Defaults to current directory.
+
+    create		Creates a fully functional Drupal project. Includes setting up database and Apache config.
+    	--name=projectname	The name of the project.
+
+    content-update	Updates local content from test or prod environment
+    	--from=[TEST|PROD]	Where to get the content.
+	--test			Update test envrionment, defaults to local.
+	
+    deploy
+	--env=[TEST|PROD]	Where to install remotely. 
+"
+    exit 0
+}
 
 function mysql_root_access {
   if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]
-  then
+ 
+ then
     read -sp "Enter your MySQL password (ENTER for none): " MYSQL_ROOT_PASS
+    echo;
+
     if [ -n "$MYSQL_ROOT_PASS" ]; then
-      while ! mysql -u root -p$MYSQL_ROOT_PASS  -e ";" ; do
-        read -p "Can't connect, please retry: " MYSQL_ROOT_PASS
-      done
-      MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+	MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
     else
-      $MYSQL_ROOT_PASS=""
+	MYSQL_ROOT_PASS=""
     fi
-	
+
+    while ! mysql -u root $MYSQL_ROOT_PASS  -e ";" ; do
+        read -sp "Can't connect, please retry: " MYSQL_ROOT_PASS
+	if [ -n "$MYSQL_ROOT_PASS" ]; then
+		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+	else
+		MYSQL_ROOT_PASS=""
+	fi
+	echo;
+    done
+ 	
     MYSQL_ROOT_PASS_HAS_RUN=1
   fi
 }
@@ -109,13 +134,13 @@ function build_drupal {
 	## DRUSH MAKE
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf /tmp/$PROJECT || true
-	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
+	drush make $PROJECT.make /tmp/$PROJECT || exit "Drush make failed"
 
 	echo "Drush make complete."
 
 	echo "Copy custom profiles, modules, themes etc..."
 
-	## COPY CUSTOM PROFILES
+	## COPY CUSTOM PROFILE
 	cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
 
 	## COPY SITES
@@ -267,13 +292,13 @@ function deploy {
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r $TEST_ROOT"
 
-			COMMAND="echo 'Put $SITE_NAME in maintenance mode' && $DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
-			COMMAND="$COMMAND && echo 'Disable elysia cron' && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-			COMMAND="$COMMAND && echo 'Revert all features' &&  $DRUSH_CMD fra --yes"
-			COMMAND="$COMMAND && echo 'Run all updates' &&  $DRUSH_CMD updb --yes"
-			COMMAND="$COMMAND && echo 'Turn off maintenance mode' &&  $DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes"
-			COMMAND="$COMMAND && echo 'Enable elysia cron' &&  $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-			COMMAND="$COMMAND && echo 'Clear all cache' && $DRUSH_CMD cc all"
+			COMMAND="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD fra --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD updb --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 
 			ssh $TEST_USER@$TEST_HOST "$COMMAND"
 			
