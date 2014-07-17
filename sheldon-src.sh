@@ -285,7 +285,7 @@ function deploy {
 	do
 		SITE_NAME="$(basename $SITE)"
 
-		if [ $SITE_NAME != "all" ]
+		if [ $SITE_NAME != "all " ]
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r $TEST_ROOT"
 
@@ -310,18 +310,21 @@ function deploy {
 
 
 function content_update { 
+	
 	mysql_root_access
+	
+	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" ];then
 
-	if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 $TEST_USER@$TEST_HOST 'echo TRUE 2>&1') ]; then
-	echo -ep "Du verkar inta ha ssh-nycklar uppsatta till $TEST_HOST, vill du lägga till det? [Y/n]" ADD_KEYS
-		if [ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ] ;then
+		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 $TEST_USER@$TEST_HOST 'echo TRUE 2>&1') ]; then
+		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till $TEST_HOST, vill du lägga till det? [Y/n]" ADD_KEYS
+			if [ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ] ;then
 
-			if [ ! -a ~/.ssh/id_dsa.pub ]; then
-			 	ssh-keygen -t dsa
+				if [ ! -a ~/.ssh/id_dsa.pub ]; then
+				 	ssh-keygen -t dsa
+				fi
+				ssh-copy-id -i ~/.ssh/id_dsa.pub $TEST_USER@TEST_HOST
 			fi
-			ssh-copy-id -i ~/.ssh/id_dsa.pub $TEST_USER@TEST_HOST
 		fi
-		
 	fi
 
 	DATESTAMP=$(date +%s)
@@ -365,9 +368,10 @@ function content_update {
 
 		echo $DROP_CREATE | mysql --database=information_schema --host=$DATABASE_HOST --user=root $MYSQL_ROOT_PASS; 
 
-		if [[ `dpkg -l | grep -w "ii  pv "` ]]; then
+		if ["$(which pv)"]; then
 			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent
 		else
+			echo "Tip! Get a nice progress bar: sudo apt-get install pv"
 			mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent < /var/tmp/$PROJECT.sql
 		fi
 	
