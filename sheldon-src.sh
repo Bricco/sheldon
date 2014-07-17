@@ -65,8 +65,6 @@ if [ "$(uname)" == "Darwin" ]; then
   APACHE_VHOSTS_DIR=/etc/apache2/other
 fi
 
-exit;
-
 function usage {
     echo "
 Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
