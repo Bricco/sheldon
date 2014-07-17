@@ -39,7 +39,7 @@ eval set -- "$TEMP"
 
 while true ; do
 	case "$1" in
-		-f|--from) echo "Option from, argument \`$2'" ; shift 2 ;;
+		-f|--from) ARG_FROM=$2 ; shift 2 ;;
 		-t|--target) echo "Option target, argument \`$2'" ; shift 2 ;;
 		-e|--env) echo "Option env, argument \`$2'" ; shift 2 ;;
 		-n|--name) echo "Option name, argument \`$2'" ; shift 2 ;;
