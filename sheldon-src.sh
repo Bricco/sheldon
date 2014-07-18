@@ -294,13 +294,13 @@ function deploy {
 	exclude_files;
 
 	if [ "$ARG_ENV" == "PROD" ]; then
-	  REMOTE="PROD"
+	  REMOTE=$PROD
 	else 
-	  REMOTE="TEST"
+	  REMOTE=$TEST
 	fi
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT ${USER[${!REMOTE}]}@${HOST[${!REMOTE}]}:"$(dirname ${ROOT[${!REMOTE}]})/"
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT ${USER[$REMOTE]}@${HOST[$REMOTE]}:"$(dirname ${ROOT[$REMOTE]})/"
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -308,7 +308,7 @@ function deploy {
 
 		if [ $SITE_NAME != "all " ]
 		then
-			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[${!REMOTE}]}"
+			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
 
 			COMMAND="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
@@ -318,7 +318,7 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 
-			ssh ${USER[${!REMOTE}]}@${HOST[${!REMOTE}]} "$COMMAND"
+			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
 			
 			echo "Sleep for 15 sec" 			
 			sleep 15
@@ -331,31 +331,37 @@ function deploy {
 
 
 function content_update { 
+
+	if [ "$ARG_FROM" == "PROD" -o "$ARG_TEST" == "TRUE" ]; then
+	  REMOTE=$PROD
+	else 
+	  REMOTE=$TEST
+	fi
 	
 	mysql_root_access
 	
-	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" ];then
+	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
 
-		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 ${USER[$TEST]}@${HOST[$TEST]} 'echo TRUE 2>&1') ]; then
-		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$TEST]}, vill du lägga till det? [Y/n]" ADD_KEYS
-			if [ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ] ;then
+		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$TEST]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
+		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$REMOTE]}, vill du lägga till det? [Y/n]" ADD_KEYS
+			if [ $ADD_KEYS == "Y" -o $ADD_KEYS == "y" ] ;then
 
 				if [ ! -a ~/.ssh/id_dsa.pub ]; then
 				 	ssh-keygen -t dsa
 				fi
-				ssh-copy-id -i ~/.ssh/id_dsa.pub ${USER[$TEST]}@${HOST[$TEST]}
+				ssh-copy-id -i ~/.ssh/id_dsa.pub ${USER[$REMOTE]}@${HOST[$REMOTE]}
 			fi
 		fi
 	fi
 
 	DATESTAMP=$(date +%s)
-	CONNECTION="--user=${DATABASE_USER[$TEST]} --host=${DATABASE_HOST[$TEST]} --password=${DATABASE_PASS[$TEST]}"
+	CONNECTION="--user=${DATABASE_USER[$REMOTE]} --host=${DATABASE_HOST[$REMOTE]} --password=${DATABASE_PASS[$REMOTE]}"
 	OPTIONS="--no-autocommit --single-transaction --opt -Q"
 	
 
 	echo "Running mysqldump command on server..."
 
-	TABLES=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "mysql $CONNECTION -D ${DATABASE[$TEST]} -Bse \"SHOW TABLES\"")
+	TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -D ${DATABASE[$REMOTE]} -Bse \"SHOW TABLES\"")
 
 
 	for T in $TABLES
@@ -372,28 +378,37 @@ function content_update {
 	done
 
 
-	QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION ${DATABASE[$TEST]} $DATA_TABLES > /var/tmp/$PROJECT.sql-$DATESTAMP"
-	QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${DATABASE[$TEST]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
+	QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION ${DATABASE[$REMOTE]} $DATA_TABLES > /var/tmp/$PROJECT.sql-$DATESTAMP"
+	QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${DATABASE[$REMOTE]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
 	QUERY="$QUERY && mv -f /var/tmp/$PROJECT.sql-$DATESTAMP /var/tmp/$PROJECT.sql"
 
-	ssh -q ${USER[$TEST]}@${HOST[$TEST]} $QUERY;
+	ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY;
 
 	echo "Rsync sql-dump-file from server..."
-	rsync -akz --progress ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
-
-	echo "Updateing local database"
 
 	DROP_CREATE="DROP DATABASE IF EXISTS ${DATABASE[$DEV]}; CREATE DATABASE ${DATABASE[$DEV]} /*!40100 DEFAULT CHARACTER SET utf8 */;"
 	DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'localhost' IDENTIFIED BY '${DATABASE_PASS[$DEV]}'; FLUSH PRIVILEGES;"
 
-	echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$DEV]} --user=root $MYSQL_ROOT_PASS; 
-
-	if ["$(which pv)"]; then
-		pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[$DEV]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent
+	if [ "$ARG_TEST" == "TRUE" ]; then
+		ssh ${USER[$TEST]}@${HOST[$TEST]} "rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql"
+		ssh ${USER[$TEST]}@${HOST[$TEST]} "echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$TEST]} --user=${DATABASE_USER[$TEST]} --password=${DATABASE_PASS[$TEST]};"
+		ssh ${USER[$TEST]}@${HOST[$TEST]} "mysql --database=${DATABASE[$TEST]} --host=${DATABASE_HOST[$TEST]} --user=${DATABASE_USER[$TEST]} --password=${DATABASE_PASS[$TEST]} --silent < /var/tmp/$PROJECT.sql"
 	else
-		echo "Tip! Get a nice progress bar: sudo apt-get install pv"
-		mysql --database=${DATABASE[i]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent < /var/tmp/$PROJECT.sql
+		rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
+		
+		echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$DEV]} --user=root $MYSQL_ROOT_PASS;
+		
+		echo "Updateing local database"
+
+		if ["$(which pv)"]; then
+			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[$DEV]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent
+		else
+			echo "Tip! Get a nice progress bar: sudo apt-get install pv"
+			mysql --database=${DATABASE[$DEV]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent < /var/tmp/$PROJECT.sql
+		fi
 	fi
+
+
 
 
 	echo "complete!"
