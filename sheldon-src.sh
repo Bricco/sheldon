@@ -1,5 +1,8 @@
 #!/bin/bash
 
+DEV=0
+TEST=1
+PROD=2
 
 ARGV="$@"
 
@@ -40,10 +43,10 @@ eval set -- "$TEMP"
 while true ; do
 	case "$1" in
 		-f|--from) ARG_FROM=$2 ; shift 2 ;;
-		-t|--target) echo "Option target, argument \`$2'" ; shift 2 ;;
-		-e|--env) echo "Option env, argument \`$2'" ; shift 2 ;;
-		-n|--name) echo "Option name, argument \`$2'" ; shift 2 ;;
-		--test) echo "Option test, argument \`$2'" ; shift 2 ;;
+		-t|--target) ARG_TARGET=$2 ; shift 2 ;;
+		-e|--env) ARG_ENV=$2; shift 2 ;;
+		-n|--name) ARG_NAME=$2 ; shift 2 ;;
+		--test) ARG_TEST="TRUE" ; shift 2 ;;
 		--) shift ; break ;;
 		*) echo "Internal error!" ; exit 1 ;;
 	esac
@@ -51,9 +54,22 @@ done
 
 PROJECT_LOCATION="$(pwd)"
 
-DATABASE=${DATABASE:-"$PROJECT"}
-DATABASE_USER=${DATABASE_USER:-"$DATABASE"}
-DATABASE_PASS=${DATABASE_PASS:-"secret"}
+DATABASE[$DEV]=${DATABASE[$DEV]:-"$PROJECT"}
+DATABASE_USER[$DEV]=${DATABASE_USER[$DEV]:-${DATABASE[$DEV]}}
+DATABASE_PASS[$DEV]=${DATABASE_PASS[$DEV]:-"secret"}
+DATABASE_HOST[$DEV]=${DATABASE_HOST[$DEV]:-"localhost"}
+
+DATABASE[$TEST]=${DATABASE[$TEST]:-${DATABASE[$DEV]}}
+DATABASE_USER[$TEST]=${DATABASE_USER[$TEST]:-${DATABASE_USER[$DEV]}}
+DATABASE_PASS[$TEST]=${DATABASE_PASS[$TEST]:-${DATABASE_PASS[$DEV]}}
+DATABASE_HOST[$TEST]=${DATABASE_HOST[$TEST]:-${DATABASE_HOST[$DEV]}}
+
+DATABASE[$PROD]=${DATABASE[$PROD]:-${DATABASE[$TEST]}}
+DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
+DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
+DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
+
+
 SITE_URL="dev.$PROJECT.se"
 
 APACHE_CMD=apache2ctl
@@ -154,7 +170,7 @@ function build_drupal {
 			cp $SITE/settings.php /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null 2>&1
 			
 			## FILTER SETTINGS.PHP
-			REPLACE=($DATABASE $DATABASE_USER $DATABASE_HOST $DATABASE_PASS "DEV"); i=0;
+			REPLACE=(${DATABASE[$DEV]} ${DATABASE_USER[$DEV]} ${DATABASE_HOST[$DEV]} ${DATABASE_PASS[$DEV]} "DEV"); i=0;
 			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
 			do
 				sed -i s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/settings.php; ((i++));
@@ -220,12 +236,7 @@ function apache_install {
 }
 
 function mysql_install {
-	
-	for DB in $(echo ${DATABASE[*]} | tr " " "\n")
-	do
-	  mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';" || exit 0;
-	done
-
+	mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '${DATABASE_USER[$DEV]}'@'${DATABASE_HOST[$DEV]}' IDENTIFIED BY '${DATABASE_PASS[$DEV]}';" || exit 0
 }
 
 function install_drupal {
@@ -258,12 +269,16 @@ function install_drupal {
 	sudo chown -R $USER:$USER "$DEPLOY_DIR/$PROJECT"
 
 	echo "BUILD successfull"
+	
 
 	read -ep "Do you want to update the database? 
 (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
 
-	if [ $UPDATE == "T" ]
-	then
+	if [ "$UPDATE" == "T" ]; then
+		ARG_FROM="TEST"
+		content_update;
+	elif [ "$UPDATE" == "P" ];then	
+		ARG_FROM="PROD"	
 		content_update;
 	fi
 	
@@ -278,8 +293,14 @@ function deploy {
 	build_drupal;
 	exclude_files;
 
+	if [ "$ARG_ENV" == "PROD" ]; then
+	  REMOTE="PROD"
+	else 
+	  REMOTE="TEST"
+	fi
+
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:"$(dirname $TEST_ROOT)/"
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT ${USER[${!REMOTE}]}@${HOST[${!REMOTE}]}:"$(dirname ${ROOT[${!REMOTE}]})/"
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -287,7 +308,7 @@ function deploy {
 
 		if [ $SITE_NAME != "all " ]
 		then
-			DRUSH_CMD="drush -l $SITE_NAME -r $TEST_ROOT"
+			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[${!REMOTE}]}"
 
 			COMMAND="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
@@ -297,7 +318,7 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 
-			ssh $TEST_USER@$TEST_HOST "$COMMAND"
+			ssh ${USER[${!REMOTE}]}@${HOST[${!REMOTE}]} "$COMMAND"
 			
 			echo "Sleep for 15 sec" 			
 			sleep 15
@@ -315,69 +336,68 @@ function content_update {
 	
 	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" ];then
 
-		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 $TEST_USER@$TEST_HOST 'echo TRUE 2>&1') ]; then
-		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till $TEST_HOST, vill du lägga till det? [Y/n]" ADD_KEYS
+		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 ${USER[$TEST]}@${HOST[$TEST]} 'echo TRUE 2>&1') ]; then
+		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$TEST]}, vill du lägga till det? [Y/n]" ADD_KEYS
 			if [ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ] ;then
 
 				if [ ! -a ~/.ssh/id_dsa.pub ]; then
 				 	ssh-keygen -t dsa
 				fi
-				ssh-copy-id -i ~/.ssh/id_dsa.pub $TEST_USER@TEST_HOST
+				ssh-copy-id -i ~/.ssh/id_dsa.pub ${USER[$TEST]}@${HOST[$TEST]}
 			fi
 		fi
 	fi
 
 	DATESTAMP=$(date +%s)
-	CONNECTION="--user=$TEST_DATABASE_USER --host=$TEST_DATABASE_HOST --password=$TEST_DATABASE_PASS"
+	CONNECTION="--user=${DATABASE_USER[$TEST]} --host=${DATABASE_HOST[$TEST]} --password=${DATABASE_PASS[$TEST]}"
 	OPTIONS="--no-autocommit --single-transaction --opt -Q"
 	
-	for(( i=0; i<${#DATABASE[@]}; i++ ))
+
+	echo "Running mysqldump command on server..."
+
+	TABLES=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "mysql $CONNECTION -D ${DATABASE[$TEST]} -Bse \"SHOW TABLES\"")
+
+
+	for T in $TABLES
 	do
-		echo "Running mysqldump command on server..."
-
-		TABLES=$(ssh -q $TEST_USER@$TEST_HOST "mysql $CONNECTION -D ${TEST_DATABASE[i]} -Bse \"SHOW TABLES\"")
-
-
-		for T in $TABLES
-		do
-			case "$T" in 
-			  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-			  *search_*|*cache_*|*watchdog|*history|*sessions)
-			    EMPTY_TABLES="$EMPTY_TABLES $T"
-			    ;;
-			  *)
-			    DATA_TABLES="$DATA_TABLES $T"
-			    ;;
-			esac		
-		done
-
-
-		QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION ${TEST_DATABASE[i]} $DATA_TABLES > /var/tmp/$PROJECT.sql-$DATESTAMP"
-		QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${TEST_DATABASE[i]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
-		QUERY="$QUERY && mv -f /var/tmp/$PROJECT.sql-$DATESTAMP /var/tmp/$PROJECT.sql"
-
-		ssh -q $TEST_USER@$TEST_HOST $QUERY;
-
-		echo "Rsync sql-dump-file from server..."
-		rsync -akz --progress $TEST_USER@$TEST_HOST:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
-
-		echo "Updateing local database"
-
-		DROP_CREATE="DROP DATABASE IF EXISTS $DATABASE; CREATE DATABASE $DATABASE /*!40100 DEFAULT CHARACTER SET utf8 */;"
-		DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON $DATABASE.* TO '$DATABASE_USER'@'localhost' IDENTIFIED BY '$DATABASE_PASS'; FLUSH PRIVILEGES;"
-
-		echo $DROP_CREATE | mysql --database=information_schema --host=$DATABASE_HOST --user=root $MYSQL_ROOT_PASS; 
-
-		if ["$(which pv)"]; then
-			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent
-		else
-			echo "Tip! Get a nice progress bar: sudo apt-get install pv"
-			mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent < /var/tmp/$PROJECT.sql
-		fi
-	
-	
-		echo "complete!"
+		case "$T" in 
+		  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
+		  *search_*|*cache_*|*watchdog|*history|*sessions)
+		    EMPTY_TABLES="$EMPTY_TABLES $T"
+		    ;;
+		  *)
+		    DATA_TABLES="$DATA_TABLES $T"
+		    ;;
+		esac		
 	done
+
+
+	QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION ${DATABASE[$TEST]} $DATA_TABLES > /var/tmp/$PROJECT.sql-$DATESTAMP"
+	QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${DATABASE[$TEST]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
+	QUERY="$QUERY && mv -f /var/tmp/$PROJECT.sql-$DATESTAMP /var/tmp/$PROJECT.sql"
+
+	ssh -q ${USER[$TEST]}@${HOST[$TEST]} $QUERY;
+
+	echo "Rsync sql-dump-file from server..."
+	rsync -akz --progress ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
+
+	echo "Updateing local database"
+
+	DROP_CREATE="DROP DATABASE IF EXISTS ${DATABASE[$DEV]}; CREATE DATABASE ${DATABASE[$DEV]} /*!40100 DEFAULT CHARACTER SET utf8 */;"
+	DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'localhost' IDENTIFIED BY '${DATABASE_PASS[$DEV]}'; FLUSH PRIVILEGES;"
+
+	echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$DEV]} --user=root $MYSQL_ROOT_PASS; 
+
+	if ["$(which pv)"]; then
+		pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[$DEV]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent
+	else
+		echo "Tip! Get a nice progress bar: sudo apt-get install pv"
+		mysql --database=${DATABASE[i]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent < /var/tmp/$PROJECT.sql
+	fi
+
+
+	echo "complete!"
+
 }
 
 
@@ -385,7 +405,7 @@ case $ARGV in
 install)
    install_drupal
     ;;
-update)
+update|content-update)
    content_update
     ;;
 deploy)
