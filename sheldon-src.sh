@@ -236,7 +236,7 @@ function apache_install {
 }
 
 function mysql_install {
-	mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '${DATABASE_USER[$DEV]}'@'${DATABASE_HOST[$DEV]}' IDENTIFIED BY '${DATABASE_PASS[$DEV]}';" || exit 0
+	mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS ${DATABASE[$DEV]};GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'${DATABASE_HOST[$DEV]}' IDENTIFIED BY '${DATABASE_PASS[$DEV]}';" || exit 0
 }
 
 function install_drupal {
