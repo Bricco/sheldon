@@ -1,3 +1,3 @@
 #!/bin/bash
 
-source <(curl -s https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon-src.sh) 
+bash <(curl -s https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon-src.sh) 
