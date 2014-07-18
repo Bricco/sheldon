@@ -12,28 +12,6 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-function usage {
-    echo "
-Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
-COMMANDS
-    install		Installs Drupal locally or remotely.
-    	--target=path		Where to install locally. Defaults to current directory.
-    	--env=[TEST|PROD]	Where to install remotely. 
-
-    create		Creates a fully functional Drupal project. Includes setting up database and Apache config.
-    	--name=projectname	The name of the project.
-
-    content-update	Updates local content from test or prod environment
-    	--from=[TEST|PROD]	Where to get the content.	
-"
-    exit 0
-}
-
-
-#if [[ ${#@} -ne 2 &&  "$1" != "upgrade" ]]; then
-#  usage;
-#fi
-
 ## READ PROPERTIES
 if [ -e "properties" ]
 then
@@ -43,8 +21,34 @@ else
   exit 
 fi
 
+PROJECT=${PROJECT:-"$(basename *.make .make)"}
 
-PROJECT=${PROJECT:-"$(basename $(pwd))"}
+if [ ! -e "$PROJECT.make" ]
+then
+  echo ".make file must exist!"
+  exit;
+fi
+
+
+## READ ARGUMENTS
+TEMP=`getopt -o f:t:e:n: --longoptions env:,target:,from:,name:,test -n "sheldon" -- "$@"`
+
+if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+
+eval set -- "$TEMP"
+
+while true ; do
+	case "$1" in
+		-f|--from) ARG_FROM=$2 ; shift 2 ;;
+		-t|--target) echo "Option target, argument \`$2'" ; shift 2 ;;
+		-e|--env) echo "Option env, argument \`$2'" ; shift 2 ;;
+		-n|--name) echo "Option name, argument \`$2'" ; shift 2 ;;
+		--test) echo "Option test, argument \`$2'" ; shift 2 ;;
+		--) shift ; break ;;
+		*) echo "Internal error!" ; exit 1 ;;
+	esac
+done
+
 PROJECT_LOCATION="$(pwd)"
 
 DATABASE=${DATABASE:-"$PROJECT"}
@@ -60,21 +64,49 @@ if [ "$(uname)" == "Darwin" ]; then
   APACHE_VHOSTS_DIR=/etc/apache2/other
 fi
 
+function usage {
+    echo "
+Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
+COMMANDS
+    install		Installs Drupal locally or remotely.
+    	--target=path		Where to install locally. Defaults to current directory.
 
+    create		Creates a fully functional Drupal project. Includes setting up database and Apache config.
+    	--name=projectname	The name of the project.
+
+    content-update	Updates local content from test or prod environment
+    	--from=[TEST|PROD]	Where to get the content.
+	--test			Update test envrionment, defaults to local.
+	
+    deploy
+	--env=[TEST|PROD]	Where to install remotely. 
+"
+    exit 0
+}
 
 function mysql_root_access {
   if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]
-  then
+ 
+ then
     read -sp "Enter your MySQL password (ENTER for none): " MYSQL_ROOT_PASS
+    echo;
+
     if [ -n "$MYSQL_ROOT_PASS" ]; then
-      while ! mysql -u root -p$MYSQL_ROOT_PASS  -e ";" ; do
-        read -p "Can't connect, please retry: " MYSQL_ROOT_PASS
-      done
-      MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+	MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
     else
-      $MYSQL_ROOT_PASS=""
+	MYSQL_ROOT_PASS=""
     fi
-	
+
+    while ! mysql -u root $MYSQL_ROOT_PASS  -e ";" ; do
+        read -sp "Can't connect, please retry: " MYSQL_ROOT_PASS
+	if [ -n "$MYSQL_ROOT_PASS" ]; then
+		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+	else
+		MYSQL_ROOT_PASS=""
+	fi
+	echo;
+    done
+ 	
     MYSQL_ROOT_PASS_HAS_RUN=1
   fi
 }
@@ -99,19 +131,18 @@ function build_drupal {
 	## DRUSH MAKE
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf /tmp/$PROJECT || true
-	drush make $PROJECT.make /tmp/$PROJECT > /dev/null 2>&1
+	drush make $PROJECT.make /tmp/$PROJECT || exit "Drush make failed"
 
 	echo "Drush make complete."
 
 	echo "Copy custom profiles, modules, themes etc..."
 
-	## COPY CUSTOM PROFILES
+	## COPY CUSTOM PROFILE
 	cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
 
 	## COPY SITES
 	cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true > /dev/null 2>&1
 
-	## COPY FILES
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
 		SITE_NAME="$(basename $SITE)"
@@ -192,7 +223,7 @@ function mysql_install {
 	
 	for DB in $(echo ${DATABASE[*]} | tr " " "\n")
 	do
-	  mysql -u root -e $MYSQL_ROOT_PASS "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';"
+	  mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS $DB;GRANT ALL PRIVILEGES ON $DB.* TO '$DATABASE_USER'@'$DATABASE_HOST' IDENTIFIED BY '$DATABASE_PASS';" || exit 0;
 	done
 
 }
@@ -200,12 +231,6 @@ function mysql_install {
 function install_drupal {
 
 	echo "Start installing $PROJECT"
-	
-	if [ ! -e "$PROJECT.make" ]
-	then
-	  echo "$PROJECT.make file must exist!"
-	  exit;
-	fi
 
 	read -ep "DEPLOY DIR?: " -i "/var/www" DEPLOY_DIR
 	
@@ -216,7 +241,7 @@ function install_drupal {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $DEPLOY_DIR/$PROJEC
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $DEPLOY_DIR/
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
@@ -254,14 +279,53 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:$TEST_ROOT 
+	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $TEST_USER@$TEST_HOST:"$(dirname $TEST_ROOT)/"
+
+	for SITE in $PROJECT_LOCATION/sites/*
+	do
+		SITE_NAME="$(basename $SITE)"
+
+		if [ $SITE_NAME != "all " ]
+		then
+			DRUSH_CMD="drush -l $SITE_NAME -r $TEST_ROOT"
+
+			COMMAND="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD fra --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD updb --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+			COMMAND="$COMMAND && $DRUSH_CMD cc all"
+
+			ssh $TEST_USER@$TEST_HOST "$COMMAND"
+			
+			echo "Sleep for 15 sec" 			
+			sleep 15
+		fi
+	done
+	
 	rm -rf /tmp/$PROJECT
 	
 }
 
 
 function content_update { 
+	
 	mysql_root_access
+	
+	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" ];then
+
+		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 $TEST_USER@$TEST_HOST 'echo TRUE 2>&1') ]; then
+		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till $TEST_HOST, vill du lägga till det? [Y/n]" ADD_KEYS
+			if [ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ] ;then
+
+				if [ ! -a ~/.ssh/id_dsa.pub ]; then
+				 	ssh-keygen -t dsa
+				fi
+				ssh-copy-id -i ~/.ssh/id_dsa.pub $TEST_USER@TEST_HOST
+			fi
+		fi
+	fi
 
 	DATESTAMP=$(date +%s)
 	CONNECTION="--user=$TEST_DATABASE_USER --host=$TEST_DATABASE_HOST --password=$TEST_DATABASE_PASS"
@@ -304,9 +368,10 @@ function content_update {
 
 		echo $DROP_CREATE | mysql --database=information_schema --host=$DATABASE_HOST --user=root $MYSQL_ROOT_PASS; 
 
-		if [[ `dpkg -l | grep -w "ii  pv "` ]]; then
+		if ["$(which pv)"]; then
 			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent
 		else
+			echo "Tip! Get a nice progress bar: sudo apt-get install pv"
 			mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent < /var/tmp/$PROJECT.sql
 		fi
 	
