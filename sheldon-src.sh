@@ -59,6 +59,8 @@ SITE_URL="dev.$PROJECT.se"
 APACHE_CMD=apache2ctl
 APACHE_VHOSTS_DIR=/etc/apache2/sites-enabled
 
+GROUP=$(id -gn)
+
 if [ "$(uname)" == "Darwin" ]; then
   APACHE_CMD=apachectl
   APACHE_VHOSTS_DIR=/etc/apache2/other
@@ -209,10 +211,10 @@ function apache_install {
 
 	if [ $? -eq 0 ]
 	then 
-	  echo "$SITE_URL allready exists in host file, didn't add anything";
+	  echo "$SITE_URL already exists in host file, didn't add anything";
 	else
 	   echo "Adding $SITE_URL to /etc/hosts"
-	   echo -e "\n127.0.0.1 $SITE_URL\n" >> /etc/hosts
+	   echo -e "127.0.0.1 $SITE_URL" | sudo tee -a /etc/hosts
 	fi
 
 	echo -e "Restarting apache...\n"
@@ -232,8 +234,15 @@ function install_drupal {
 
 	echo "Start installing $PROJECT"
 
-	read -ep "DEPLOY DIR?: " -i "/var/www" DEPLOY_DIR
-	
+	read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
+	if  [ "$DEPLOY_DIR" == "" ]; then
+		DEPLOY_DIR="/var/www"
+	fi
+	if  [ ! -d $DEPLOY_DIR ]; then
+		echo "Directory $DEPLOY_DIR was not found. Exiting."
+		exit 1
+	fi
+
 	mysql_root_access;
 	apache_install;
 	mysql_install;
@@ -255,7 +264,7 @@ function install_drupal {
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
 	
-	sudo chown -R $USER:$USER "$DEPLOY_DIR/$PROJECT"
+	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT"
 
 	echo "BUILD successfull"
 
@@ -368,7 +377,7 @@ function content_update {
 
 		echo $DROP_CREATE | mysql --database=information_schema --host=$DATABASE_HOST --user=root $MYSQL_ROOT_PASS; 
 
-		if ["$(which pv)"]; then
+		if type pv &> /dev/null ; then
 			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[i]} --host=$DATABASE_HOST --user=$DATABASE_USER --password=$DATABASE_PASS --silent
 		else
 			echo "Tip! Get a nice progress bar: sudo apt-get install pv"
