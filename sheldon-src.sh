@@ -315,7 +315,7 @@ function deploy {
 	do
 		SITE_NAME="$(basename $SITE)"
 
-		if [ $SITE_NAME != "all " ]
+		if [ $SITE_NAME != "all" ]
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
 
