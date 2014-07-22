@@ -309,7 +309,7 @@ function deploy {
 	fi
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT ${USER[$REMOTE]}@${HOST[$REMOTE]}:"$(dirname ${ROOT[$REMOTE]})/"
+	rsync "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT ${USER[$REMOTE]}@${HOST[$REMOTE]}:"$(dirname ${ROOT[$REMOTE]})/"
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
