@@ -327,7 +327,7 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 
-			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
+			ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
 			
 			echo "Sleep for 15 sec" 			
 			sleep 15
