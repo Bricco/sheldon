@@ -5,6 +5,7 @@ TEST=1
 PROD=2
 
 ARGV="$@"
+ARG="$1"
 
 if [ "x$ARGV" = "x" ] ; then
     ARGV="-h"
@@ -52,7 +53,9 @@ while true ; do
 	esac
 done
 
+
 PROJECT_LOCATION="$(pwd)"
+MULTISITE=$(if [ $(ls -l $PROJECT_LOCATION/sites | grep ^d | wc -l) > 2 ];then echo "TRUE";else echo "FALSE";fi);
 
 DATABASE[$DEV]=${DATABASE[$DEV]:-"$PROJECT"}
 DATABASE_USER[$DEV]=${DATABASE_USER[$DEV]:-${DATABASE[$DEV]}}
@@ -69,6 +72,14 @@ DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
 
+read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
+if  [ "$DEPLOY_DIR" == "" ]; then
+	DEPLOY_DIR="/var/www"
+fi
+if  [ ! -d $DEPLOY_DIR ]; then
+	echo "Directory $DEPLOY_DIR was not found. Exiting."
+	exit 1
+fi
 
 SITE_URL="dev.$PROJECT.se"
 
@@ -145,11 +156,21 @@ function exclude_files {
 }
 
 function build_drupal {
+	
 
 	## DRUSH MAKE
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf /tmp/$PROJECT || true
-	drush make $PROJECT.make /tmp/$PROJECT || exit "Drush make failed"
+	
+	if [[ ! ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]];then
+		echo "Make file not changed since last build, fetching from cache..."
+		tar xfz ~/.sheldoncache/$PROJECT.tar.gz --directory /tmp	
+	else	
+	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
+	  drush make $PROJECT.make /tmp/$PROJECT > /dev/null || exit "Drush make failed"
+	  mkdir -p ~/.sheldoncache
+	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz --directory /tmp $PROJECT
+	fi
 
 	echo "Drush make complete."
 
@@ -169,14 +190,15 @@ function build_drupal {
 		then
 			echo "Copy and filter sites/$SITE_NAME/settings.php"
 			mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
-			cp $SITE/settings.php /tmp/$PROJECT/sites/$SITE_NAME/settings.php > /dev/null 2>&1
+
+			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" /tmp/$PROJECT/sites/$SITE_NAME/*settings.php ; ((i++));
 			
 			## FILTER SETTINGS.PHP
-			#REPLACE=(${DATABASE[$DEV]} ${DATABASE_USER[$DEV]} ${DATABASE_HOST[$DEV]} ${DATABASE_PASS[$DEV]} "DEV"); i=0;
-			#for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
-			#do
-			#	sed -i '.bak' s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/settings.php; ((i++));
-			#done
+			REPLACE=(${DATABASE[$DEV]} ${DATABASE_USER[$DEV]} ${DATABASE_HOST[$DEV]} ${DATABASE_PASS[$DEV]} "DEV"); i=0;
+			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
+			do
+				sed -i -e s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/*settings.php ; ((i++));
+			done
 		fi
 	done
 
@@ -189,9 +211,10 @@ function apache_install {
 	VHOST="<VirtualHost *:80>
 	ServerName $SITE_URL"
 
-	for SITE in "$PROJECT_LOCATION/sites/*"
+	for SITE in $PROJECT_LOCATION/sites/*
 	do
-		SITE_NAME="$(basename $SITE)"
+		SITE_NAME=$(basename "$SITE")
+	
 		if [[ $SITE_NAME == "default" || $SITE_NAME == "all" ]]
 		then
 	  	  continue
@@ -219,17 +242,12 @@ function apache_install {
 		LogLevel warn
 		CustomLog /var/log/apache2/$PROJECT.log combined
 
-	</VirtualHost>" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null
+	</VirtualHost>" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null	
 
-	echo "Adding $SITE_URL to /etc/hosts"
-
-	grep -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts
-
-	if [ $? -eq 0 ]
-	then 
-	  echo "$SITE_URL already exists in host file, didn't add anything";
+	if grep -q -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts; then 
+	  echo "domain already exists in host file, didn't add anything";
 	else
-	   echo "Adding $SITE_URL to /etc/hosts"
+	   echo "Adding domain(s) to /etc/hosts"
 	   echo -e "127.0.0.1 $SITE_URL" | sudo tee -a /etc/hosts
 	fi
 
@@ -238,25 +256,42 @@ function apache_install {
 }
 
 function mysql_install {
-	mysql -u root $MYSQL_ROOT_PASS -e "CREATE DATABASE IF NOT EXISTS ${DATABASE[$DEV]};GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'${DATABASE_HOST[$DEV]}' IDENTIFIED BY '${DATABASE_PASS[$DEV]}';" || exit 0
+	
+	for SITE in $PROJECT_LOCATION/sites/*
+	do
+
+	  SITE_NAME=$(basename "$SITE")
+	  if [[ $SITE_NAME != "all" ]]; then	
+		
+		drushargs="-l $SITE_NAME -r $DEPLOY_DIR/$PROJECT"
+
+		DB_NAME=$(drush $drushargs sql-connect | sed 's#.*database=\([^ ]*\).*#\1#g')
+		DB_PASS=$(drush $drushargs sql-connect | sed 's#.*password=\([^ ]*\).*#\1#g')
+		DB_USER=$(drush $drushargs sql-connect | sed 's#.*user=\([^ ]*\).*#\1#g')
+		DB_HOST=$(drush $drushargs sql-connect | sed 's#.*host=\([^ ]*\).*#\1#g')
+		
+		if [[ "$DB_NAME" != "" ]]; then		
+		QUERY="CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+			if [[ "$DB_USER" != "root" ]]; then	
+			QUERY="$QUERY GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';"
+			fi
+		echo "mysql > $QUERY"
+		mysql -u root $MYSQL_ROOT_PASS -e "$QUERY" || exit 0
+		fi
+	  fi
+	done
+
+
 }
 
 function install_drupal {
 
-	echo "Start installing $PROJECT"
+	ARG_ENV="DEV"
 
-	read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
-	if  [ "$DEPLOY_DIR" == "" ]; then
-		DEPLOY_DIR="/var/www"
-	fi
-	if  [ ! -d $DEPLOY_DIR ]; then
-		echo "Directory $DEPLOY_DIR was not found. Exiting."
-		exit 1
-	fi
+	echo "Start installing $PROJECT"
 
 	mysql_root_access;
 	apache_install;
-	mysql_install;
 	build_drupal;
 	exclude_files;
 
@@ -276,6 +311,8 @@ function install_drupal {
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
 	
 	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT"
+
+	mysql_install;
 
 	echo "BUILD successfull"
 	
@@ -327,7 +364,7 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 
-			ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
+			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
 			
 			echo "Sleep for 15 sec" 			
 			sleep 15
@@ -352,10 +389,10 @@ function content_update {
 	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
 
 		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$TEST]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
-		echo -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$REMOTE]}, vill du lägga till det? [Y/n]" ADD_KEYS
+		read -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$REMOTE]}, vill du lägga till det? [Y/n]" ADD_KEYS
 			if [ $ADD_KEYS == "Y" -o $ADD_KEYS == "y" ] ;then
 
-				if [ ! -a ~/.ssh/id_dsa.pub ]; then
+				if [[ ! -a ~/.ssh/id_dsa.pub ]]; then
 				 	ssh-keygen -t dsa
 				fi
 				ssh-copy-id -i ~/.ssh/id_dsa.pub ${USER[$REMOTE]}@${HOST[$REMOTE]}
@@ -363,58 +400,84 @@ function content_update {
 		fi
 	fi
 
-	DATESTAMP=$(date +%s)
-	CONNECTION="--user=${DATABASE_USER[$REMOTE]} --host=${DATABASE_HOST[$REMOTE]} --password=${DATABASE_PASS[$REMOTE]}"
-	OPTIONS="--no-autocommit --single-transaction --opt -Q"
-	
-
-	echo "Running mysqldump command on server..."
-
-	TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -D ${DATABASE[$REMOTE]} -Bse \"SHOW TABLES\"")
-
-
-	for T in $TABLES
+	for SITE in $PROJECT_LOCATION/sites/*
 	do
-		case "$T" in 
-		  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-		  *search_*|*cache_*|*watchdog|*history|*sessions)
-		    EMPTY_TABLES="$EMPTY_TABLES $T"
-		    ;;
-		  *)
-		    DATA_TABLES="$DATA_TABLES $T"
-		    ;;
-		esac		
+		SITE_NAME="$(basename $SITE)"
+
+		if [ $SITE_NAME != "all" ]
+		then
+		   DATESTAMP=$(date +%s)
+		   CONNECTION=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME" | sed 's#--database=##g' | sed 's#mysql ##g')
+
+
+
+		   OPTIONS="--no-autocommit --single-transaction --opt -Q"
+
+		   echo "Running mysqldump command on server ($SITE_NAME)..."
+		   TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -Bse \"SHOW TABLES\"" || echo "ERROR");
+		   
+		   if echo $TABLES | grep -q "ERROR" ; then
+			echo "Couldn't connect to: mysql $CONNECTION"
+			continue;
+		   fi
+			EMPTY_TABLES=""; 
+			DATA_TABLES="";
+		   	for T in $TABLES
+			do
+				case "$T" in 
+				  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
+				  *search_*|*cache_*|*watchdog|*history|*sessions)
+				    EMPTY_TABLES="$EMPTY_TABLES $T"
+				    ;;
+				  *)
+				    DATA_TABLES="$DATA_TABLES $T"
+				    ;;
+				esac		
+		   	done
+
+			QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES > /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
+			QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES >> /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
+			QUERY="$QUERY && mv -f /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP /var/tmp/$PROJECT-$SITE_NAME.sql"
+		
+			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY;
+
+			#DROP_CREATE="DROP DATABASE IF EXISTS ${DATABASE[$DEV]}; CREATE DATABASE ${DATABASE[$DEV]} /*!40100 DEFAULT CHARACTER SET utf8 */;"
+			#DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'localhost' IDENTIFIED BY '${DATABASE_PASS[$DEV]}'; FLUSH PRIVILEGES;"
+
+			if [ "$ARG_TEST" == "TRUE" ]; then
+				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME")
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql"
+				#ssh ${USER[$TEST]}@${HOST[$TEST]} "echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$TEST]} --user=${DATABASE_USER[$TEST]} --password=${DATABASE_PASS[$TEST]};"
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
+			else		
+				echo "Rsync sql-dump-file from server..."
+				rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
+				
+				DEVCONNECTION=$(drush sql-connect -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
+
+			#	echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$DEV]} --user=root $MYSQL_ROOT_PASS;
+		
+				echo "Updateing local database"
+		
+				if type pv &> /dev/null ; then
+					pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent
+				else
+					echo "Tip! Get a nice progress bar: sudo apt-get install pv"
+					$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql
+				fi
+			fi
+ 
+		fi
 	done
 
 
-	QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION ${DATABASE[$REMOTE]} $DATA_TABLES > /var/tmp/$PROJECT.sql-$DATESTAMP"
-	QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION ${DATABASE[$REMOTE]} $EMPTY_TABLES >> /var/tmp/$PROJECT.sql-$DATESTAMP"
-	QUERY="$QUERY && mv -f /var/tmp/$PROJECT.sql-$DATESTAMP /var/tmp/$PROJECT.sql"
+	
 
-	ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY;
 
-	DROP_CREATE="DROP DATABASE IF EXISTS ${DATABASE[$DEV]}; CREATE DATABASE ${DATABASE[$DEV]} /*!40100 DEFAULT CHARACTER SET utf8 */;"
-	DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'localhost' IDENTIFIED BY '${DATABASE_PASS[$DEV]}'; FLUSH PRIVILEGES;"
 
-	if [ "$ARG_TEST" == "TRUE" ]; then
-		ssh ${USER[$TEST]}@${HOST[$TEST]} "rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql"
-		ssh ${USER[$TEST]}@${HOST[$TEST]} "echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$TEST]} --user=${DATABASE_USER[$TEST]} --password=${DATABASE_PASS[$TEST]};"
-		ssh ${USER[$TEST]}@${HOST[$TEST]} "mysql --database=${DATABASE[$TEST]} --host=${DATABASE_HOST[$TEST]} --user=${DATABASE_USER[$TEST]} --password=${DATABASE_PASS[$TEST]} --silent < /var/tmp/$PROJECT.sql"
-	else		
-		echo "Rsync sql-dump-file from server..."
-		rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT.sql /var/tmp/$PROJECT.sql
-		
-		echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$DEV]} --user=root $MYSQL_ROOT_PASS;
-		
-		echo "Updateing local database"
-		
-		if type pv &> /dev/null ; then
-			pv /var/tmp/$PROJECT.sql | mysql --database=${DATABASE[$DEV]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent
-		else
-			echo "Tip! Get a nice progress bar: sudo apt-get install pv"
-			mysql --database=${DATABASE[$DEV]} --host=${DATABASE_HOST[$DEV]} --user=${DATABASE_USER[$DEV]} --password=${DATABASE_PASS[$DEV]} --silent < /var/tmp/$PROJECT.sql
-		fi
-	fi
+
+
+
 
 
 
@@ -424,7 +487,7 @@ function content_update {
 }
 
 
-case $ARGV in
+case $ARG in
 install)
    install_drupal
     ;;
