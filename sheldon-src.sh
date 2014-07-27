@@ -367,11 +367,16 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
-
-			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
 			
-			echo "Sleep for 15 sec" 			
-			sleep 15
+			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status db-status --format=list") == "Connected" ]]; then 
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
+			
+				echo "Sleep for 15 sec" 			
+				sleep 15
+			else
+				echo "Problems with $SITE_NAME, no database connection."
+			fi		
+			
 		fi
 	done
 	
