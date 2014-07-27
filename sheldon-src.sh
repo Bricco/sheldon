@@ -368,6 +368,8 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 			
+
+			echo -e "\n\n####################\nexecute updates for $SITE_NAME \n"
 			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status db-status --format=list") == "Connected" ]]; then 
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
 			
