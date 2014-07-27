@@ -194,7 +194,7 @@ function build_drupal {
 			echo "Copy and filter sites/$SITE_NAME/settings.php"
 			mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
 
-			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" /tmp/$PROJECT/sites/$SITE_NAME/*settings.php ; ((i++));
+			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" /tmp/$PROJECT/sites/$SITE_NAME/settings.php ; ((i++));
 			
 			## FILTER SETTINGS.PHP
 			REPLACE=(${DATABASE[$DEV]} ${DATABASE_USER[$DEV]} ${DATABASE_HOST[$DEV]} ${DATABASE_PASS[$DEV]} "DEV"); i=0;
