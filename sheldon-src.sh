@@ -72,14 +72,6 @@ DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
 
-read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
-if  [ "$DEPLOY_DIR" == "" ]; then
-	DEPLOY_DIR="/var/www"
-fi
-if  [ ! -d $DEPLOY_DIR ]; then
-	echo "Directory $DEPLOY_DIR was not found. Exiting."
-	exit 1
-fi
 
 SITE_URL="dev.$PROJECT.se"
 
@@ -113,10 +105,21 @@ COMMANDS
     exit 0
 }
 
+function set_deploydir {
+  if [[ -z "$DEPLOY_DIR" ]]; then	
+	read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
+	if  [ "$DEPLOY_DIR" == "" ]; then
+		DEPLOY_DIR="/var/www"
+	fi
+	if  [ ! -d $DEPLOY_DIR ]; then
+		echo "Directory $DEPLOY_DIR was not found. Exiting."
+		exit 1
+	fi
+ fi
+}
+
 function mysql_root_access {
-  if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]
- 
- then
+  if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]; then
     read -sp "Enter your MySQL password (ENTER for none): " MYSQL_ROOT_PASS
     echo;
 
@@ -289,7 +292,8 @@ function install_drupal {
 	ARG_ENV="DEV"
 
 	echo "Start installing $PROJECT"
-
+	
+	set_deploydir;
 	mysql_root_access;
 	apache_install;
 	build_drupal;
@@ -384,7 +388,8 @@ function content_update {
 	  REMOTE=$TEST
 	fi
 	
-	mysql_root_access
+	set_deploydir;
+	mysql_root_access;
 	
 	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
 
