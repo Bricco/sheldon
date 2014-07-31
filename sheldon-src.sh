@@ -388,6 +388,12 @@ function deploy {
 
 function reset_drupal { 
 	set_deploydir;
+
+	if [[  ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]];then
+		echo "Make file updated, running install."
+		install_drupal;	
+	fi
+
 	for SITE in $PROJECT_LOCATION/sites/*
 		do
 			SITE_NAME="$(basename $SITE)"
