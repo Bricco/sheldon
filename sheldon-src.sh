@@ -369,7 +369,7 @@ function deploy {
 			COMMAND="$COMMAND && $DRUSH_CMD cc all"
 			
 
-			echo -e "\n\n####################\nexecute updates for $SITE_NAME \n"
+			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
 			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status db-status --format=list") == "Connected" ]]; then 
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
 			
@@ -386,6 +386,24 @@ function deploy {
 	
 }
 
+function reset_drupal { 
+	set_deploydir;
+	for SITE in $PROJECT_LOCATION/sites/*
+		do
+			SITE_NAME="$(basename $SITE)"
+
+			if [ $SITE_NAME != "all" ]; then
+
+				if [[ $(drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME status db-status --format=list) == "Connected" ]]; then 
+				
+					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME fra -y
+					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME updb -y
+					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME cc all -y
+				fi
+			fi
+		done
+
+}
 
 function content_update { 
 
@@ -508,6 +526,9 @@ update|content-update)
     ;;
 deploy)
    deploy
+    ;;
+reset)
+   reset_drupal
     ;;
 *)
 usage
