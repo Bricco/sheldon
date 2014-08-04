@@ -360,18 +360,18 @@ function deploy {
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
 
-			COMMAND="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes"
-			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-			COMMAND="$COMMAND && $DRUSH_CMD fra --yes"
-			COMMAND="$COMMAND && $DRUSH_CMD updb --yes"
-			COMMAND="$COMMAND && $DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes"
-			COMMAND="$COMMAND && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-			COMMAND="$COMMAND && $DRUSH_CMD cc all"
+			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+			COMMAND2="$DRUSH_CMD fra --yes && $DRUSH_CMD updb --yes"
+			COMMAND3="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+			COMMAND4="$DRUSH_CMD cc all"
 			
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
 			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status db-status --format=list") == "Connected" ]]; then 
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND1"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND2"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND4"
 			
 				echo "Sleep for 15 sec" 			
 				sleep 15
