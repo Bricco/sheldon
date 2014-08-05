@@ -482,17 +482,18 @@ function content_update {
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME")
+				
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql"
-				#ssh ${USER[$TEST]}@${HOST[$TEST]} "echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$TEST]} --user=${DATABASE_USER[$TEST]} --password=${DATABASE_PASS[$TEST]};"
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print \"SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS \" $1 \";SET FOREIGN_KEY_CHECKS = 1;\"}' | $TESTCONNECTION"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
 			else		
 				echo "Rsync sql-dump-file from server..."
 				rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
 				
 				DEVCONNECTION=$(drush sql-connect -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
-
-			#	echo $DROP_CREATE | mysql --database=information_schema --host=${DATABASE_HOST[$DEV]} --user=root $MYSQL_ROOT_PASS;
 		
+				$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION
+
 				echo "Updateing local database"
 		
 				if type pv &> /dev/null ; then
