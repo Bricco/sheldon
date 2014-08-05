@@ -367,7 +367,7 @@ function deploy {
 			
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
-			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status db-status --format=list") == "Connected" ]]; then 
+			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status Database | tail -2 | head -1 | sed -e 's/.*\?\(Connected\)/\1/g'") == "Connected" ]]; then 
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND1"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND2"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
@@ -424,7 +424,7 @@ function content_update {
 	
 	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
 
-		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$TEST]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
+		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$REMOTE]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
 		read -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$REMOTE]}, vill du lägga till det? [Y/n]" ADD_KEYS
 			if [ $ADD_KEYS == "Y" -o $ADD_KEYS == "y" ] ;then
 
@@ -476,9 +476,6 @@ function content_update {
 			QUERY="$QUERY && mv -f /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP /var/tmp/$PROJECT-$SITE_NAME.sql"
 		
 			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY;
-
-			#DROP_CREATE="DROP DATABASE IF EXISTS ${DATABASE[$DEV]}; CREATE DATABASE ${DATABASE[$DEV]} /*!40100 DEFAULT CHARACTER SET utf8 */;"
-			#DROP_CREATE="$DROP_CREATE GRANT ALL PRIVILEGES ON ${DATABASE[$DEV]}.* TO '${DATABASE_USER[$DEV]}'@'localhost' IDENTIFIED BY '${DATABASE_PASS[$DEV]}'; FLUSH PRIVILEGES;"
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME")
