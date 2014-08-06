@@ -47,9 +47,9 @@ while true ; do
 		-t|--target) ARG_TARGET=$2 ; shift 2 ;;
 		-e|--env) ARG_ENV=$2; shift 2 ;;
 		-n|--name) ARG_NAME=$2 ; shift 2 ;;
-		--test) ARG_TEST="TRUE" ; shift 1 ;;
-		--mamp) ARG_MAMP="TRUE" ; shift 1 ;;
-		--no-cache) ARG_NOCACHE="TRUE" ; shift 1 ;;
+		--test) ARG_TEST="TRUE" ; shift ;;
+		--mamp) ARG_MAMP="TRUE" ; shift ;;
+		--no-cache) ARG_NOCACHE="TRUE" ; shift ;;
 		--) shift ; break ;;
 		*) echo "Internal error!" ; exit 1 ;;
 	esac
@@ -57,7 +57,6 @@ done
 
 
 PROJECT_LOCATION="$(pwd)"
-MULTISITE=$(if [ $(ls -l $PROJECT_LOCATION/sites | grep ^d | wc -l) > 2 ];then echo "TRUE";else echo "FALSE";fi);
 
 DATABASE[$DEV]=${DATABASE[$DEV]:-"$PROJECT"}
 DATABASE_USER[$DEV]=${DATABASE_USER[$DEV]:-${DATABASE[$DEV]}}
@@ -165,21 +164,21 @@ function build_drupal {
 
 	## DRUSH MAKE
 	echo "Bulding $PROJECT.make, this can take a while..."
-	rm -rf /tmp/$PROJECT || true
+	rm -rf tmp || true
 	
 	if [[ ! ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]];then
 		echo "Make file not changed since last build, fetching from cache..."
-		tar xfz ~/.sheldoncache/$PROJECT.tar.gz --directory /tmp	
+		tar xfz ~/.sheldoncache/$PROJECT.tar.gz	
 	else	
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  if [ "$ARG_NOCACHE" == "TRUE" ]; then
-		drush make --no-cache $PROJECT.make /tmp/$PROJECT > /dev/null || exit "Drush make failed"
+		drush make --no-cache $PROJECT.make tmp > /dev/null || exit "Drush make failed"
 	  else
-	  	drush make $PROJECT.make /tmp/$PROJECT > /dev/null || exit "Drush make failed"
+	  	drush make $PROJECT.make tmp > /dev/null || exit "Drush make failed"
 	  fi
 
 	  mkdir -p ~/.sheldoncache
-	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz --directory /tmp $PROJECT
+	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
 	fi
 
 	echo "Drush make complete."
@@ -187,10 +186,10 @@ function build_drupal {
 	echo "Copy custom profiles, modules, themes etc..."
 
 	## COPY CUSTOM PROFILE
-	cp -r "$PROJECT_LOCATION/profiles" "/tmp/$PROJECT/" > /dev/null 2>&1 || true
+	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
 
 	## COPY SITES
-	cp -r "$PROJECT_LOCATION/sites" "/tmp/$PROJECT/" || true > /dev/null 2>&1
+	cp -r "$PROJECT_LOCATION/sites" "tmp/" || true > /dev/null 2>&1
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -199,15 +198,15 @@ function build_drupal {
 		if [ $SITE_NAME != "all" ]
 		then
 			echo "Copy and filter sites/$SITE_NAME/settings.php"
-			mkdir -p "/tmp/$PROJECT/sites/$SITE_NAME/files"
+			mkdir -p "tmp/sites/$SITE_NAME/files"
 
-			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" /tmp/$PROJECT/sites/$SITE_NAME/settings.php ; ((i++));
+			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php ; ((i++));
 			
 			## FILTER SETTINGS.PHP
 			REPLACE=(${DATABASE[$DEV]} ${DATABASE_USER[$DEV]} ${DATABASE_HOST[$DEV]} ${DATABASE_PASS[$DEV]} "DEV"); i=0;
 			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
 			do
-				sed -i -e s/$SEARCH/${REPLACE[$i]}/g /tmp/$PROJECT/sites/$SITE_NAME/*settings.php ; ((i++));
+				sed -i -e s/$SEARCH/${REPLACE[$i]}/g tmp/sites/$SITE_NAME/*settings.php ; ((i++));
 			done
 		fi
 	done
@@ -312,7 +311,8 @@ function install_drupal {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT $DEPLOY_DIR/
+	rsync --delete --cvs-exclude -akz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
+	rm -rf tmp
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
@@ -362,7 +362,8 @@ function deploy {
 	fi
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE /tmp/$PROJECT ${USER[$REMOTE]}@${HOST[$REMOTE]}:"$(dirname ${ROOT[$REMOTE]})/"
+	rsync --delete --cvs-exclude -akz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/
+	rm -rf tmp
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -516,16 +517,6 @@ function content_update {
  
 		fi
 	done
-
-
-	
-
-
-
-
-
-
-
 
 
 
