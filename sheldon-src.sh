@@ -47,9 +47,9 @@ while true ; do
 		-t|--target) ARG_TARGET=$2 ; shift 2 ;;
 		-e|--env) ARG_ENV=$2; shift 2 ;;
 		-n|--name) ARG_NAME=$2 ; shift 2 ;;
-		--test) ARG_TEST="TRUE" ; shift 2 ;;
-		--mamp) ARG_MAMP="TRUE" ; shift 2 ;;
-		--no-cache) ARG_NOCACHE="TRUE" ; shift 2 ;;
+		--test) ARG_TEST="TRUE" ; shift 1 ;;
+		--mamp) ARG_MAMP="TRUE" ; shift 1 ;;
+		--no-cache) ARG_NOCACHE="TRUE" ; shift 1 ;;
 		--) shift ; break ;;
 		*) echo "Internal error!" ; exit 1 ;;
 	esac
