@@ -48,6 +48,7 @@ while true ; do
 		-e|--env) ARG_ENV=$2; shift 2 ;;
 		-n|--name) ARG_NAME=$2 ; shift 2 ;;
 		--test) ARG_TEST="TRUE" ; shift 2 ;;
+		--mamp) ARG_MAMP="TRUE" ; shift 2 ;;
 		--) shift ; break ;;
 		*) echo "Internal error!" ; exit 1 ;;
 	esac
@@ -295,7 +296,12 @@ function install_drupal {
 	
 	set_deploydir;
 	mysql_root_access;
-	apache_install;
+
+	if [ "$ARG_MAMP" != "TRUE" ]; then		
+		apache_install;
+	fi
+	
+	
 	build_drupal;
 	exclude_files;
 
@@ -400,7 +406,7 @@ function reset_drupal {
 
 			if [ $SITE_NAME != "all" ]; then
 
-				if [[ $(drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME status db-status --format=list) == "Connected" ]]; then 
+				if [[ $(drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME status Database | tail -2 | head -1 | sed -e 's/.*\?\(Connected\)/\1/g') == "Connected" ]]; then 
 				
 					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME fra -y
 					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME updb -y
@@ -420,7 +426,7 @@ function content_update {
 	fi
 	
 	set_deploydir;
-	mysql_root_access;
+	#mysql_root_access;
 	
 	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
 
@@ -488,7 +494,8 @@ function content_update {
 				rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
 				
 				DEVCONNECTION=$(drush sql-connect -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
-		
+				
+				echo "Dropping all tables in local database"
 				$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION
 
 				echo "Updateing local database"
