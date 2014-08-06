@@ -49,6 +49,7 @@ while true ; do
 		-n|--name) ARG_NAME=$2 ; shift 2 ;;
 		--test) ARG_TEST="TRUE" ; shift 2 ;;
 		--mamp) ARG_MAMP="TRUE" ; shift 2 ;;
+		--no-cache) ARG_NOCACHE="TRUE" ; shift 2 ;;
 		--) shift ; break ;;
 		*) echo "Internal error!" ; exit 1 ;;
 	esac
@@ -171,7 +172,12 @@ function build_drupal {
 		tar xfz ~/.sheldoncache/$PROJECT.tar.gz --directory /tmp	
 	else	
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
-	  drush make $PROJECT.make /tmp/$PROJECT > /dev/null || exit "Drush make failed"
+	  if [ "$ARG_NOCACHE" == "TRUE" ]; then
+		drush make --no-cache $PROJECT.make /tmp/$PROJECT > /dev/null || exit "Drush make failed"
+	  else
+	  	drush make $PROJECT.make /tmp/$PROJECT > /dev/null || exit "Drush make failed"
+	  fi
+
 	  mkdir -p ~/.sheldoncache
 	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz --directory /tmp $PROJECT
 	fi
