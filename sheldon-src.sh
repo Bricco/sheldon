@@ -35,7 +35,7 @@ fi
 
 
 ## READ ARGUMENTS
-TEMP=`getopt -o f:t:e:n: --longoptions env:,target:,from:,name:,test -n "sheldon" -- "$@"`
+TEMP=`getopt -o f:t:e:n: --longoptions env:,target:,from:,name:,test,mamp,no-cache -n "sheldon" -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
 
