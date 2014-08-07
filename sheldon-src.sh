@@ -380,7 +380,7 @@ function deploy {
 			
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
-			if [[ $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status Database | tail -2 | head -1 | sed -e 's/.*\?\(Connected\)/\1/g'") == "Connected" ]]; then 
+			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status Database") | grep -q "Connected" ; then 
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND1"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND2"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
