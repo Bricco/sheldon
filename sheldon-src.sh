@@ -4,6 +4,10 @@ DEV=0
 TEST=1
 PROD=2
 
+DEV_MODULES="devel field_ui views_ui stage_file_proxy"
+PROD_MODULES="memcahce varnish openx"
+
+
 ARGV="$@"
 ARG="$1"
 
@@ -145,6 +149,13 @@ function mysql_root_access {
 }
 
 function exclude_files {
+	
+	if [ -n "$RSYNC_EXCLUDE" ]; then
+		RSYNC_EXCLUDE=( $RSYNC_EXCLUDE )
+		for EX in ${RSYNC_EXCLUDE[@]}; do
+			EXCLUDE="$EXCLUDE --exclude=$EX"
+		done
+	fi
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -160,6 +171,10 @@ function exclude_files {
 }
 
 function build_drupal {
+
+	if [ "$ARG_ENV" == "DEV" ]; then
+		REMOTE=$DEV;
+	fi
 	
 
 	## DRUSH MAKE
@@ -203,7 +218,7 @@ function build_drupal {
 			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php ; ((i++));
 			
 			## FILTER SETTINGS.PHP
-			REPLACE=(${DATABASE[$DEV]} ${DATABASE_USER[$DEV]} ${DATABASE_HOST[$DEV]} ${DATABASE_PASS[$DEV]} "DEV"); i=0;
+			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
 			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
 			do
 				sed -i -e s/$SEARCH/${REPLACE[$i]}/g tmp/sites/$SITE_NAME/*settings.php ; ((i++));
@@ -279,7 +294,7 @@ function mysql_install {
 		DB_USER=$(drush $drushargs sql-connect | sed 's#.*user=\([^ ]*\).*#\1#g')
 		DB_HOST=$(drush $drushargs sql-connect | sed 's#.*host=\([^ ]*\).*#\1#g')
 		
-		if [[ "$DB_NAME" != "" ]]; then		
+		if [[ $(echo "$DB_NAME" | tr -d ' ') != "" ]]; then		
 		QUERY="CREATE DATABASE IF NOT EXISTS $DB_NAME;"
 			if [[ "$DB_USER" != "root" ]]; then	
 			QUERY="$QUERY GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';"
@@ -311,7 +326,7 @@ function install_drupal {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
+	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
 	rm -rf tmp
 
 	## MAKE SURE THESE FOLDERS EXISTS
@@ -352,17 +367,18 @@ function install_drupal {
 
 function deploy { 
 
-	build_drupal;
-	exclude_files;
-
 	if [ "$ARG_ENV" == "PROD" ]; then
 	  REMOTE=$PROD
 	else 
+	  ARG_ENV="TEST"	
 	  REMOTE=$TEST
 	fi
 
+	build_drupal;
+	exclude_files;
+
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -akz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/
+	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/
 	rm -rf tmp
 
 	for SITE in $PROJECT_LOCATION/sites/*
@@ -498,6 +514,9 @@ function content_update {
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print \"SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS \" $1 \";SET FOREIGN_KEY_CHECKS = 1;\"}' | $TESTCONNECTION"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
+
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y"
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME dis $PROD_MODULES -y"
 			else		
 				echo "Rsync sql-dump-file from server..."
 				rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
@@ -515,6 +534,14 @@ function content_update {
 					echo "Tip! Get a nice progress bar: sudo apt-get install pv"
 					$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql
 				fi
+				
+				echo "Try to disable any of following modules: $PROD_MODULES"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME dis $PROD_MODULES -y
+
+				echo "Enabling following modules: $DEV_MODULES"				
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
+				
+			
 			fi
  
 		fi
