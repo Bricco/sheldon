@@ -20,15 +20,6 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-## READ PROPERTIES
-if [ -e "properties" ]
-then
-. properties
-else
-  echo "properties file must exist!"
-  exit 
-fi
-
 PROJECT=${PROJECT:-"$(basename *.make .make)"}
 
 if [ ! -e "$PROJECT.make" ]
@@ -36,6 +27,57 @@ then
   echo ".make file must exist!"
   exit;
 fi
+
+## READ PROPERTIES
+
+if [[ -e "sheldon.conf" ]]; then
+. sheldon.conf
+elif [[ -e "properties" ]]; then
+. properties
+echo "properties file is deprecated and will be now be renamed to sheldon.conf, please commit the changes."
+mv properties sheldon.conf
+else
+  echo "sheldon.conf file must exist!"
+  #echo "" > sheldon.conf
+  read -ep "Do you want to create a sheldon.conf now? [Y/n]" CREATE
+  if [ "$CREATE" == "Y" -o "$CREATE" == "y" ] ;then
+  	echo -e "### sheldon.conf ###
+#Local database settings defaluts to: mysql --user="$PROJECT" --host=localhost --password=secret --database="$PROJECT"
+#DATABASE_HOST[\$DEV]=localhost
+#DATABASE_USER[\$DEV]="$PROJECT"
+#DATABASE_PASS[\$DEV]=secret
+#DATABASE[\$DEV]="$PROJECT"
+
+#required parameters, you have to outcomment and change this section.
+#USER[\$TEST]=www-data
+#HOST[\$TEST]=91.123.203.189
+#ROOT[\$TEST]=/var/www/"$PROJECT"
+
+#Test database settings defaults to the local database settings.
+#DATABASE_HOST[\$DEV]=localhost
+#DATABASE_USER[\$DEV]="$PROJECT"
+#DATABASE_PASS[\$DEV]=secret
+#DATABASE[\$DEV]="$PROJECT"
+
+#required parameters, you have to outcomment and change this section.
+#USER[\$PROD]=deploy
+#HOST[\$PROD]=www."$PROJECT".se
+#ROOT[\$PROD]=/mnt/persist/www/docroot
+
+#Prod database settings defaults to the test database settings.
+#DATABASE_HOST[\$PROD]=localhost
+#DATABASE_USER[\$PROD]=$PROJECT
+#DATABASE_PASS[\$PROD]=secret
+#DATABASE[\$PROD]=$PROJECT
+
+#Exclude som extra paths when deploying with rcync (seperated by space). For example google verification file.
+#RSYNC_EXCLUDE=\"google* other-file.txt sites/default/test.xml\"
+" | tee sheldon.conf
+  fi
+  exit 
+fi
+
+
 
 
 ## READ ARGUMENTS
@@ -92,17 +134,13 @@ fi
 
 function usage {
     echo "
-Usage: $0 install|create|content-update [--target=path] [--env=[TEST|PROD]] [--name=sitename] [--from=[TEST|PROD]]
+Usage: $0 install|update|deploy [--env=[TEST|PROD]] [--from=[TEST|PROD]]
 COMMANDS
-    install		Installs Drupal locally or remotely.
-    	--target=path		Where to install locally. Defaults to current directory.
+    install		Installs Drupal locally.
 
-    create		Creates a fully functional Drupal project. Includes setting up database and Apache config.
-    	--name=projectname	The name of the project.
-
-    content-update	Updates local content from test or prod environment
-    	--from=[TEST|PROD]	Where to get the content.
-	--test			Update test envrionment, defaults to local.
+    update	Updates local content from test or prod environment
+    --from=[TEST|PROD]	Where to get the content.
+	--test				Update test envrionment (test-contet-update).
 	
     deploy
 	--env=[TEST|PROD]	Where to install remotely. 
@@ -129,19 +167,19 @@ function mysql_root_access {
     echo;
 
     if [ -n "$MYSQL_ROOT_PASS" ]; then
-	MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+	  MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
     else
-	MYSQL_ROOT_PASS=""
+	  MYSQL_ROOT_PASS=""
     fi
 
     while ! mysql -u root $MYSQL_ROOT_PASS  -e ";" ; do
         read -sp "Can't connect, please retry: " MYSQL_ROOT_PASS
-	if [ -n "$MYSQL_ROOT_PASS" ]; then
-		MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
-	else
-		MYSQL_ROOT_PASS=""
-	fi
-	echo;
+		if [ -n "$MYSQL_ROOT_PASS" ]; then
+			MYSQL_ROOT_PASS="--password=$MYSQL_ROOT_PASS"
+		else
+			MYSQL_ROOT_PASS=""
+		fi
+		echo;
     done
  	
     MYSQL_ROOT_PASS_HAS_RUN=1
@@ -214,9 +252,9 @@ function build_drupal {
 		then
 			echo "Copy and filter sites/$SITE_NAME/settings.php"
 			mkdir -p "tmp/sites/$SITE_NAME/files"
-
-			sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php ; ((i++));
-			
+			if ! grep -q -E "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then 
+				sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
+			fi
 			## FILTER SETTINGS.PHP
 			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
 			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
@@ -471,12 +509,9 @@ function content_update {
 	do
 		SITE_NAME="$(basename $SITE)"
 
-		if [ $SITE_NAME != "all" ]
-		then
+		if [ "$SITE_NAME" != "all" ]; then
 		   DATESTAMP=$(date +%s)
 		   CONNECTION=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME" | sed 's#--database=##g' | sed 's#mysql ##g')
-
-
 
 		   OPTIONS="--no-autocommit --single-transaction --opt -Q"
 
@@ -493,7 +528,7 @@ function content_update {
 			do
 				case "$T" in 
 				  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-				  *search_*|*cache_*|*watchdog|*history|*sessions)
+				  *search_*|*cache_*|*watchdog|*history|*sessions|*accesslog)
 				    EMPTY_TABLES="$EMPTY_TABLES $T"
 				    ;;
 				  *)
@@ -508,25 +543,30 @@ function content_update {
 		
 			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY;
 
+			echo "Rsync sql-dump-file from server..."
+			rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
+
 			if [ "$ARG_TEST" == "TRUE" ]; then
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME")
 				
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql"
+				echo "Pushing sql-dump-file to TEST server..."
+				rsync -akz --progress /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql
+				echo "Drop all tables in the TEST database"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print \"SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS \" $1 \";SET FOREIGN_KEY_CHECKS = 1;\"}' | $TESTCONNECTION"
+				echo "Imports the sql-dump into the TEST database"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
-
+				echo "Enable dev modules and disable prod modules"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME dis $PROD_MODULES -y"
+				rm /var/tmp/$PROJECT-$SITE_NAME.sql
 			else		
-				echo "Rsync sql-dump-file from server..."
-				rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
-				
+								
 				DEVCONNECTION=$(drush sql-connect -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
 				
 				echo "Dropping all tables in local database"
 				$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION
 
-				echo "Updateing local database"
+				echo "Updating local database"
 		
 				if type pv &> /dev/null ; then
 					pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent
@@ -541,9 +581,7 @@ function content_update {
 				echo "Enabling following modules: $DEV_MODULES"				
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
 				
-			
 			fi
- 
 		fi
 	done
 
