@@ -252,7 +252,8 @@ function build_drupal {
 		then
 			echo "Copy and filter sites/$SITE_NAME/settings.php"
 			mkdir -p "tmp/sites/$SITE_NAME/files"
-			if ! grep -q -E "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then 
+			if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
+				echo "Append environment constant \"define('ENVIRONMENT', '$ARG_ENV');\" to /sites/$SITE_NAME/settings.php" 
 				sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 			fi
 			## FILTER SETTINGS.PHP
@@ -494,7 +495,7 @@ function content_update {
 	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
 
 		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$REMOTE]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
-		read -ep "Du verkar inta ha ssh-nycklar uppsatta till ${HOST[$REMOTE]}, vill du lägga till det? [Y/n]" ADD_KEYS
+		read -ep "You do not seem to have ssh keys to ${HOST[$REMOTE]}, do you want to add it? [Y/n]" ADD_KEYS
 			if [ $ADD_KEYS == "Y" -o $ADD_KEYS == "y" ] ;then
 
 				if [[ ! -a ~/.ssh/id_dsa.pub ]]; then
@@ -606,7 +607,8 @@ reset)
    reset_drupal
     ;;
 *)
-usage
+	usage
+	;;
 esac
 
 exit $ERROR
