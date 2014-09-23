@@ -413,6 +413,11 @@ function deploy {
 	  REMOTE=$TEST
 	fi
 
+	if [[ -z "${HOST[$REMOTE]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
+		echo "Missing remote settings for the environment you try to connect to, check your sheldon.conf."
+		exit;
+	fi
+
 	build_drupal;
 	exclude_files;
 
@@ -483,20 +488,30 @@ function reset_drupal {
 
 function content_update { 
 
-	if [ "$ARG_FROM" == "PROD" -o "$ARG_TEST" == "TRUE" ]; then
+	if [[ "$ARG_FROM" == "PROD" || "$ARG_TEST" == "TRUE" ]]; then
 	  REMOTE=$PROD
 	else 
 	  REMOTE=$TEST
+	fi
+
+	if [[ -z "${HOST[$REMOTE]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
+		echo "Missing remote settings for the environment you try to connect to, check your sheldon.conf."
+		exit;
+	fi
+
+	if [[ "$ARG_TEST" == "TRUE" ]] && [[ -z "${HOST[$REMOTE]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
+		echo "Missing remote settings for the environment you try to connect to, check your sheldon.conf."
+		exit;
 	fi
 	
 	set_deploydir;
 	#mysql_root_access;
 	
-	if [ "$(which ssh-copy-id)" -a "$(which ssh-keygen)" -a "$ARG_TEST" != "TRUE" ];then
-
+	if [[ "$(which ssh-copy-id)" && "$(which ssh-keygen)" && "$ARG_TEST" != "TRUE" ]];then
+		
 		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$REMOTE]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
 		read -ep "You do not seem to have ssh keys to ${HOST[$REMOTE]}, do you want to add it? [Y/n]" ADD_KEYS
-			if [ $ADD_KEYS == "Y" -o $ADD_KEYS == "y" ] ;then
+			if [[ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ]] ;then
 
 				if [[ ! -a ~/.ssh/id_dsa.pub ]]; then
 				 	ssh-keygen -t dsa
@@ -581,6 +596,10 @@ function content_update {
 
 				echo "Enabling following modules: $DEV_MODULES"				
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
+
+				echo "Change admin login to: admin/admin"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME user-password admin --password=admin
 				
 			fi
 		fi
@@ -588,7 +607,7 @@ function content_update {
 
 
 
-	echo "complete!"
+	echo "Bazinga!"
 
 }
 
