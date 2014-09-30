@@ -254,7 +254,7 @@ function build_drupal {
 			mkdir -p "tmp/sites/$SITE_NAME/files"
 			if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
 				echo "Append environment constant \"define('ENVIRONMENT', '$ARG_ENV');\" to /sites/$SITE_NAME/settings.php" 
-				sed -i -e "s/<?php/<?php\ndefine(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
+				sed -i -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 			fi
 			## FILTER SETTINGS.PHP
 			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
