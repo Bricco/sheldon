@@ -236,13 +236,23 @@ function build_drupal {
 
 	echo "Drush make complete."
 
-	echo "Copy custom profiles, modules, themes etc..."
+	echo "Copy custom profiles, modules, themes, .htaccess, robots.txt etc..."
 
 	## COPY CUSTOM PROFILE
 	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
 
 	## COPY SITES
 	cp -r "$PROJECT_LOCATION/sites" "tmp/" || true > /dev/null 2>&1
+	
+	## COPY .htaccess
+	if [[ -e  "$PROJECT_LOCATION/htaccess.htaccess" ]]; then
+		cp "$PROJECT_LOCATION/htaccess.htaccess" "tmp/.htaccess"
+	fi
+	
+	## COPY robots.txt
+	if [[ -e  "$PROJECT_LOCATION/robots.txt" ]]; then
+		cp "$PROJECT_LOCATION/robots.txt" "tmp/"
+	fi
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -367,8 +377,8 @@ function install_drupal {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
-	rm -rf tmp
+	rsync --delete -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
+	#rm -rf tmp
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
