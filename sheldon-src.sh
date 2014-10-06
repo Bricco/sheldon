@@ -378,7 +378,7 @@ function install_drupal {
 
 	#RSYNC with delete,
 	rsync --delete -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
-	#rm -rf tmp
+	rm -rf tmp
 
 	## MAKE SURE THESE FOLDERS EXISTS
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
