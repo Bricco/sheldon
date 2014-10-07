@@ -603,8 +603,8 @@ function content_update {
 					$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql
 				fi
 				
-				echo "Try to disable any of following modules: $PROD_MODULES"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME dis $PROD_MODULES -y
+				#echo "Try to disable any of following modules: $PROD_MODULES"
+				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME dis $PROD_MODULES -y
 
 				echo "Enabling following modules: $DEV_MODULES"				
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
