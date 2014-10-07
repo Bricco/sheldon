@@ -273,7 +273,7 @@ function build_drupal {
 				sed -i.bak -e s/$SEARCH/${REPLACE[$i]}/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
 			done
 			
-			rm tmp/sites/$SITE_NAME/*.bak
+			rm -f tmp/sites/$SITE_NAME/*.bak
 		fi
 	done
 
