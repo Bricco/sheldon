@@ -300,22 +300,41 @@ function apache_install {
 		fi
 	done
 
+
 	echo "$VHOST
 	DocumentRoot $DEPLOY_DIR/$PROJECT/
 
 		<Directory />
-		        Options FollowSymLinks
+		        Options +FollowSymLinks
 		        AllowOverride All
 		</Directory>
 		<Directory $DEPLOY_DIR/$PROJECT>
-		        Options +Indexes +FollowSymLinks +MultiViews +ExecCGI
+		        Options +FollowSymLinks -Indexes
 		        AllowOverride All
+			Require all granted
 		        Order allow,deny
 		        allow from all
 		</Directory>
+
+		ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+		<Directory \"/usr/lib/cgi-bin\">
+		        AllowOverride All
+		        Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+		        Require all granted
+		        #Order allow,deny
+		        #Allow from all
+		</Directory>
+
 		ErrorLog /var/log/apache2/$PROJECT-error.log
-		LogLevel warn
-		CustomLog /var/log/apache2/$PROJECT.log combined
+		LogLevel info
+        
+                <IfModule mod_php5.c>
+                  php_flag  display_errors        on
+		  php_flag  log_errors        	  on
+		  php_flag  mysql.trace_mode      on
+                  php_value error_reporting       32767 
+                </IfModule>
+
 
 	</VirtualHost>" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null	
 
@@ -585,7 +604,7 @@ function content_update {
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
 				echo "Enable dev modules and disable prod modules"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME dis $PROD_MODULES -y"
+				#ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME dis $PROD_MODULES -y"
 				rm /var/tmp/$PROJECT-$SITE_NAME.sql
 			else		
 								
