@@ -593,18 +593,18 @@ function content_update {
 			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit
 
 			echo "Rsync sql-dump-file from server..."
-			rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit
+			rsync -akz ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$TEST]} -l $SITE_NAME")
 				
 				echo "Pushing sql-dump-file to TEST server..."
-				rsync -akz --progress /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit
+				rsync -akz /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit
 				
 				echo "Drop all tables in the TEST database"				
 				ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
 				DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "echo $DROP_COMMAND | $TESTCONNECTION" 2> /dev/null || exit
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" 2> /dev/null || { echo "failed to drop all tables. "; exit }
 				
 				echo "Imports the sql-dump into the TEST database"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit
