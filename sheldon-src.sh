@@ -535,7 +535,7 @@ function content_update {
 		exit;
 	fi
 	
-	if [[ "$ARG_TEST" != "TRUE" ]] then;
+	if [[ "$ARG_TEST" != "TRUE" ]]; then
 		set_deploydir;
 	fi
 	#mysql_root_access;
