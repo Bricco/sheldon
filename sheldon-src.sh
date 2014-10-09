@@ -604,7 +604,7 @@ function content_update {
 				echo "Drop all tables in the TEST database"				
 				ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
 				DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "$DROP_COMMAND | $TESTCONNECTION"
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "echo $DROP_COMMAND | $TESTCONNECTION" 2> /dev/null || exit
 				
 				echo "Imports the sql-dump into the TEST database"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit
