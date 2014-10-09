@@ -596,7 +596,7 @@ function content_update {
 			rsync -akz --progress ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
-				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME")
+				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$TEST]} -l $SITE_NAME")
 				
 				echo "Pushing sql-dump-file to TEST server..."
 				rsync -akz --progress /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql
@@ -605,7 +605,7 @@ function content_update {
 				echo "Imports the sql-dump into the TEST database"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
 				echo "Enable dev modules and disable prod modules"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y"
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y"
 				#ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$REMOTE]} -l $SITE_NAME dis $PROD_MODULES -y"
 				rm /var/tmp/$PROJECT-$SITE_NAME.sql
 			else		
