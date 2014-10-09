@@ -601,7 +601,7 @@ function content_update {
 				echo "Pushing sql-dump-file to TEST server..."
 				rsync -akz --progress /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql
 				echo "Drop all tables in the TEST database"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print \"SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS \" $1 \";SET FOREIGN_KEY_CHECKS = 1;\"}' | $TESTCONNECTION"
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//' | awk '{print \"SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS \" $1 \";SET FOREIGN_KEY_CHECKS = 1;\"}' | $TESTCONNECTION"
 				echo "Imports the sql-dump into the TEST database"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql"
 				echo "Enable dev modules and disable prod modules"
