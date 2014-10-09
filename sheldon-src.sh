@@ -535,7 +535,9 @@ function content_update {
 		exit;
 	fi
 	
-	set_deploydir;
+	if [[ "$ARG_TEST" != "TRUE" ]] then;
+		set_deploydir;
+	fi
 	#mysql_root_access;
 	
 	if [[ "$(which ssh-copy-id)" && "$(which ssh-keygen)" && "$ARG_TEST" != "TRUE" ]];then
