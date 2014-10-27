@@ -446,7 +446,7 @@ function deploy {
 
 	if [[ -z "${HOST[$REMOTE]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
 		echo "Missing remote settings for the environment you try to connect to, check your sheldon.conf."
-		exit;
+		exit 1;
 	fi
 
 	build_drupal;
