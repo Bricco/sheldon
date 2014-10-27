@@ -25,7 +25,7 @@ PROJECT=${PROJECT:-"$(basename *.make .make)"}
 if [ ! -e "$PROJECT.make" ]
 then
   echo ".make file must exist!"
-  exit;
+  exit 1;
 fi
 
 ## READ PROPERTIES
@@ -74,7 +74,7 @@ else
 #RSYNC_EXCLUDE=\"google* other-file.txt sites/default/test.xml\"
 " | tee sheldon.conf
   fi
-  exit 
+  exit 1
 fi
 
 
@@ -527,12 +527,12 @@ function content_update {
 
 	if [[ -z "${HOST[$REMOTE]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
 		echo "Missing remote settings for the environment you try to connect to, check your sheldon.conf."
-		exit;
-	fi
+		exit 1;
+ 	fi
 
-	if [[ "$ARG_TEST" == "TRUE" ]] && [[ -z "${HOST[$REMOTE]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
+	if [[ "$ARG_TEST" == "TRUE" ]] && [[ -z "${HOST[$TEST]}" || -z "${USER[$REMOTE]}" || -z "${ROOT[$REMOTE]}" ]]; then
 		echo "Missing remote settings for the environment you try to connect to, check your sheldon.conf."
-		exit;
+		exit 1;
 	fi
 	
 	if [[ "$ARG_TEST" != "TRUE" ]]; then
@@ -590,16 +590,16 @@ function content_update {
 			QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES >> /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
 			QUERY="$QUERY && mv -f /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP /var/tmp/$PROJECT-$SITE_NAME.sql"
 		
-			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit
+			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
 
 			echo "Rsync sql-dump-file from server..."
-			rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit
+			rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$TEST]} -l $SITE_NAME")
 				
 				echo "Pushing sql-dump-file to TEST server..."
-				rsync -akzq /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit
+				rsync -akzq /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 				
 				echo "Drop all tables in the TEST database"				
 				ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
@@ -607,10 +607,10 @@ function content_update {
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" 2> /dev/null || { echo "failed to drop all tables."; exit 1;}
 				
 				echo "Imports the sql-dump into the TEST database"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit 1 
 				
 				echo "Enable dev modules and disable prod modules"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y" 2> /dev/null || exit
+				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y" 2> /dev/null || exit 1
 				#ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME dis $PROD_MODULES -y"
 				rm /var/tmp/$PROJECT-$SITE_NAME.sql
 			else		
