@@ -577,7 +577,7 @@ function content_update {
 			do
 				case "$T" in
 				  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-				  *search_*|*cache_*|*watchdog|*history|*sessions|*accesslog)
+				  *search_index|*cache_*|*watchdog|*history|*sessions|*accesslog)
 				    EMPTY_TABLES="$EMPTY_TABLES $T"
 				    ;;
 				  *)
