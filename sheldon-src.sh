@@ -127,6 +127,7 @@ APACHE_VHOSTS_DIR=/etc/apache2/sites-enabled
 
 GROUP=$(id -gn)
 
+# Handle Mac specifics
 if [ "$(uname)" == "Darwin" ]; then
   APACHE_CMD=apachectl
   APACHE_VHOSTS_DIR=/etc/apache2/other
@@ -208,6 +209,7 @@ function exclude_files {
 	done
 }
 
+# Can be called from Bamboo or locally
 function build_drupal {
 
 	if [ "$ARG_ENV" == "DEV" ]; then
@@ -281,7 +283,7 @@ function build_drupal {
 
 function apache_install {
 
-	echo "Creating apache config file: /etc/apache2/sites-enabled/$PROJECT.conf"
+	echo "Creating apache config file: $APACHE_VHOSTS_DIR/$PROJECT.conf"
 
 	VHOST="<VirtualHost *:80>
 	ServerName $SITE_URL"
@@ -434,7 +436,7 @@ function install_drupal {
 
 }
 
-
+# Only called from Bamboo
 function deploy {
 
 	if [ "$ARG_ENV" == "PROD" ]; then
@@ -595,7 +597,8 @@ function content_update {
 			echo "Rsync sql-dump-file from server..."
 			rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
-			if [ "$ARG_TEST" == "TRUE" ]; then
+			if [ "$ARG_TEST" == "TRUE" ]; then # Test content update
+
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$TEST]} -l $SITE_NAME")
 
 				echo "Pushing sql-dump-file to TEST server..."
@@ -613,7 +616,8 @@ function content_update {
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y" 2> /dev/null || exit 1
 				#ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME dis $PROD_MODULES -y"
 				rm /var/tmp/$PROJECT-$SITE_NAME.sql
-			else
+
+			else # local update from PROD/TEST
 
 				DEVCONNECTION=$(drush sql-connect -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
 
