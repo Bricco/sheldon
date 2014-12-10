@@ -221,19 +221,32 @@ function build_drupal {
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf tmp || true
 
-	if [[ ! ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]];then
-		echo "Make file not changed since last build, fetching from cache..."
-		tar xfz ~/.sheldoncache/$PROJECT.tar.gz
-	else
+	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]];then
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  if [ "$ARG_NOCACHE" == "TRUE" ]; then
-		drush make --no-cache $PROJECT.make tmp > /dev/null || exit "Drush make failed"
+		drush make --no-cache $PROJECT.make tmp > /dev/null || exit 1
 	  else
-	  	drush make $PROJECT.make tmp > /dev/null || exit "Drush make failed"
+	  	drush make $PROJECT.make tmp > /dev/null || exit 1
+	  fi
+
+	  if [[ -e composer.json ]]; then
+	  	if type foo >/dev/null 2>&1; then
+	  		cp composer.json tmp/composer.json
+	  		composer install --working-dir=tmp
+	  	else
+	  		echo "This project requires composer!"
+	  		echo "Install, and try again:"
+	  		echo "curl -sS https://getcomposer.org/installer | php"
+			echo "sudo mv composer.phar /usr/local/bin/composer"
+			exit 1;
+	  	fi
 	  fi
 
 	  mkdir -p ~/.sheldoncache
 	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
+	else
+	  	echo "Make file not changed since last build, fetching from cache..."
+		tar xfz ~/.sheldoncache/$PROJECT.tar.gz
 	fi
 
 	echo "Drush make complete."
