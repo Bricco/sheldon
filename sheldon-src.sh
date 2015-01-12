@@ -223,14 +223,10 @@ function build_drupal {
 
 	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]];then
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
-	  if [ "$ARG_NOCACHE" == "TRUE" ]; then
-		drush make --no-cache $PROJECT.make tmp > /dev/null || exit 1
-	  else
-	  	drush make $PROJECT.make tmp > /dev/null || exit 1
-	  fi
+	  drush make $PROJECT.make tmp > /dev/null || exit 1
 
 	  if [[ -e composer.json ]]; then
-	  	if type foo >/dev/null 2>&1; then
+	  	if type composer >/dev/null 2>&1; then
 	  		cp composer.json tmp/composer.json
 	  		composer install --working-dir=tmp
 	  	else
