@@ -483,12 +483,16 @@ function deploy {
 		if [ $SITE_NAME != "all" ]
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
+			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD") | grep -q -v "language-import"; then
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD dl drush_language"
+			fi
 
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
 			COMMAND2="$DRUSH_CMD fra --yes"
 			COMMAND3="$DRUSH_CMD updb --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-			COMMAND5="$DRUSH_CMD cc all"
+			COMMAND5="for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po'); do file=$(basename $f); dir=$(basename $(dirname $f)); lang=$(echo $filename | sed -e 's/.po$//g' | sed -e 's/$dir.//g'); $DRUSH_CMD language-import $lang $f --replace; done;"
+			COMMAND6="$DRUSH_CMD cc all"
 
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
@@ -498,6 +502,7 @@ function deploy {
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND4"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND5"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND6"
 
 				echo "Sleep for 15 sec"
 				sleep 15
