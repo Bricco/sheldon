@@ -47,6 +47,7 @@ else
 #DATABASE_USER[\$DEV]="$PROJECT"
 #DATABASE_PASS[\$DEV]=secret
 #DATABASE[\$DEV]="$PROJECT"
+#TMP_DIR=[\$DEV]/tmp
 
 #required parameters, you have to outcomment and change this section.
 #USER[\$TEST]=www-data
@@ -54,10 +55,11 @@ else
 #ROOT[\$TEST]=/var/www/"$PROJECT"
 
 #Test database settings defaults to the local database settings.
-#DATABASE_HOST[\$DEV]=localhost
-#DATABASE_USER[\$DEV]="$PROJECT"
-#DATABASE_PASS[\$DEV]=secret
-#DATABASE[\$DEV]="$PROJECT"
+#DATABASE_HOST[\$TEST]=localhost
+#DATABASE_USER[\$TEST]="$PROJECT"
+#DATABASE_PASS[\$TEST]=secret
+#DATABASE[\$TEST]="$PROJECT"
+#TMP_DIR=[\$TEST]/tmp
 
 #required parameters, you have to outcomment and change this section.
 #USER[\$PROD]=deploy
@@ -69,6 +71,7 @@ else
 #DATABASE_USER[\$PROD]=$PROJECT
 #DATABASE_PASS[\$PROD]=secret
 #DATABASE[\$PROD]=$PROJECT
+#TMP_DIR=[\$PROD]/tmp
 
 #Exclude som extra paths when deploying with rcync (seperated by space). For example google verification file.
 #RSYNC_EXCLUDE=\"google* other-file.txt sites/default/test.xml\"
@@ -108,16 +111,20 @@ DATABASE[$DEV]=${DATABASE[$DEV]:-"$PROJECT"}
 DATABASE_USER[$DEV]=${DATABASE_USER[$DEV]:-${DATABASE[$DEV]}}
 DATABASE_PASS[$DEV]=${DATABASE_PASS[$DEV]:-"secret"}
 DATABASE_HOST[$DEV]=${DATABASE_HOST[$DEV]:-"localhost"}
+TMP_DIR[$DEV]=${TMP_DIR[$DEV]:-"/tmp"}
+
 
 DATABASE[$TEST]=${DATABASE[$TEST]:-${DATABASE[$DEV]}}
 DATABASE_USER[$TEST]=${DATABASE_USER[$TEST]:-${DATABASE_USER[$DEV]}}
 DATABASE_PASS[$TEST]=${DATABASE_PASS[$TEST]:-${DATABASE_PASS[$DEV]}}
 DATABASE_HOST[$TEST]=${DATABASE_HOST[$TEST]:-${DATABASE_HOST[$DEV]}}
+TMP_DIR[$TEST]=${TMP_DIR[$TEST]:-${TMP_DIR[$DEV]}}
 
 DATABASE[$PROD]=${DATABASE[$PROD]:-${DATABASE[$TEST]}}
 DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
+TMP_DIR[$PROD]=${TMP_DIR[$PROD]:-${TMP_DIR[$TEST]}}
 
 
 SITE_URL="dev.$PROJECT.se"
@@ -278,10 +285,12 @@ function build_drupal {
 				sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 			fi
 			## FILTER SETTINGS.PHP
-			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
-			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
+			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV" ${TMP_DIR[$REMOTE]}); i=0;
+			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@ @file.temporary.path@" | tr " " "\n")
 			do
-				sed -i.bak -e s/$SEARCH/${REPLACE[$i]}/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
+				## escape / to get sed to work
+				REPLACED_VALUE=${REPLACE[$i]//\//\\\/};
+				sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
 			done
 
 			rm -f tmp/sites/$SITE_NAME/*.bak
