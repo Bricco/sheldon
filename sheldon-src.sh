@@ -483,6 +483,7 @@ function deploy {
 		if [ $SITE_NAME != "all" ]
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
+			## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
 			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD") | grep -q -v "language-import"; then
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD dl drush_language"
 			fi
@@ -491,7 +492,7 @@ function deploy {
 			COMMAND2="$DRUSH_CMD fra --yes"
 			COMMAND3="$DRUSH_CMD updb --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-			COMMAND5="for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po'); do file=$(basename $f); dir=$(basename $(dirname $f)); lang=$(echo $filename | sed -e 's/.po$//g' | sed -e 's/$dir.//g'); $DRUSH_CMD language-import $lang $f --replace; done;"
+			COMMAND5="for f in \$(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po'); do file=\$(basename \$f); dir=\$(basename \$(dirname \$f)); lang=\$(echo \$filename | sed -e 's/.po//g' | sed -e 's/$dir.//g'); $DRUSH_CMD language-import \$lang \$f --replace; done;"
 			COMMAND6="$DRUSH_CMD cc all"
 
 
