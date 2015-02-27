@@ -476,26 +476,35 @@ function deploy {
 	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
 	rm -rf tmp
 
-	for SITE in $PROJECT_LOCATION/sites/*
+    ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
+    if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
+            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
+            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
+    fi
+    ## Look for language files for all modules and themes
+    LANG_CMDS=()
+    for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
+    do
+        file=$(basename $f)
+        dir=$(basename $(dirname $f))
+        lang=$(echo $file | sed -e "s/.po//g" | sed -e "s/$dir.//g")
+        LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+    done
+
+    for SITE in $PROJECT_LOCATION/sites/*
 	do
 		SITE_NAME="$(basename $SITE)"
 
 		if [ $SITE_NAME != "all" ]
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
-			
-			## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
-			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD") | grep -q -v "language-import"; then
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD dl drush_language"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cache-clear drush"
-			fi
+
 
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
 			COMMAND2="$DRUSH_CMD fra --yes"
 			COMMAND3="$DRUSH_CMD updb --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-			COMMAND5="for f in \$(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po'); do file=\$(basename \$f); dir=\$(basename \$(dirname \$f)); lang=\$(echo \$filename | sed -e 's/.po//g' | sed -e 's/$dir.//g'); $DRUSH_CMD language-import \$lang \$f --replace; done;"
-			COMMAND6="$DRUSH_CMD cc all"
+			COMMAND5="$DRUSH_CMD cc all"
 
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
@@ -505,9 +514,14 @@ function deploy {
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND4"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND5"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND6"
 
-				echo "Sleep for 15 sec"
+                echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
+                for LANG_CMD in "${LANG_CMDS[@]}"
+                do
+                    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
+                done
+                
+   				echo "Sleep for 15 sec"
 				sleep 15
 			else
 				echo "Problems with $SITE_NAME, no database connection."
