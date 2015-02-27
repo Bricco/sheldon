@@ -637,6 +637,9 @@ function content_update {
 			echo "Rsync sql-dump-file from server..."
 			rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
+			#Clean up by removing sql-dump.
+			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm /var/tmp/$PROJECT-$SITE_NAME.sql"
+
 			if [ "$ARG_TEST" == "TRUE" ]; then # Test content update
 
 				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$TEST]} -l $SITE_NAME")
