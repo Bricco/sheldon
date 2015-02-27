@@ -483,9 +483,11 @@ function deploy {
 		if [ $SITE_NAME != "all" ]
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
+			
 			## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
 			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD") | grep -q -v "language-import"; then
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD dl drush_language"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cache-clear drush"
 			fi
 
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
