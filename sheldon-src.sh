@@ -501,8 +501,8 @@ function deploy {
 
 
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-			COMMAND2="$DRUSH_CMD fra --yes"
-			COMMAND3="$DRUSH_CMD updb --yes"
+			COMMAND2="$DRUSH_CMD updb --yes"
+			COMMAND3="$DRUSH_CMD fra --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND5="$DRUSH_CMD cc all"
 
