@@ -271,7 +271,7 @@ function build_drupal {
 
 	## COPY root_files/*
 	if [[ -d  "$PROJECT_LOCATION/root_files" ]]; then
-		cp "$PROJECT_LOCATION/root_files/*" "tmp/"
+		cp $PROJECT_LOCATION/root_files/* tmp/
 	fi
 
 	## COPY robots.txt
