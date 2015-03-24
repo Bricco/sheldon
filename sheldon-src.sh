@@ -272,6 +272,11 @@ function build_drupal {
 		cp "$PROJECT_LOCATION/htaccess.htaccess" "tmp/.htaccess"
 	fi
 
+	## COPY root_files/*
+	if [[ -d  "$PROJECT_LOCATION/root_files" ]]; then
+		cp "$PROJECT_LOCATION/root_files/*" "tmp/"
+	fi
+
 	## COPY robots.txt
 	if [[ -e  "$PROJECT_LOCATION/robots.txt" ]]; then
 		cp "$PROJECT_LOCATION/robots.txt" "tmp/"
