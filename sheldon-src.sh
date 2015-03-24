@@ -47,6 +47,7 @@ else
 #DATABASE_USER[\$DEV]="$PROJECT"
 #DATABASE_PASS[\$DEV]=secret
 #DATABASE[\$DEV]="$PROJECT"
+#TMP_DIR=[\$DEV]/tmp
 
 #required parameters, you have to outcomment and change this section.
 #USER[\$TEST]=www-data
@@ -54,10 +55,11 @@ else
 #ROOT[\$TEST]=/var/www/"$PROJECT"
 
 #Test database settings defaults to the local database settings.
-#DATABASE_HOST[\$DEV]=localhost
-#DATABASE_USER[\$DEV]="$PROJECT"
-#DATABASE_PASS[\$DEV]=secret
-#DATABASE[\$DEV]="$PROJECT"
+#DATABASE_HOST[\$TEST]=localhost
+#DATABASE_USER[\$TEST]="$PROJECT"
+#DATABASE_PASS[\$TEST]=secret
+#DATABASE[\$TEST]="$PROJECT"
+#TMP_DIR=[\$TEST]/tmp
 
 #required parameters, you have to outcomment and change this section.
 #USER[\$PROD]=deploy
@@ -69,6 +71,7 @@ else
 #DATABASE_USER[\$PROD]=$PROJECT
 #DATABASE_PASS[\$PROD]=secret
 #DATABASE[\$PROD]=$PROJECT
+#TMP_DIR=[\$PROD]/tmp
 
 #Exclude som extra paths when deploying with rcync (seperated by space). For example google verification file.
 #RSYNC_EXCLUDE=\"google* other-file.txt sites/default/test.xml\"
@@ -108,16 +111,20 @@ DATABASE[$DEV]=${DATABASE[$DEV]:-"$PROJECT"}
 DATABASE_USER[$DEV]=${DATABASE_USER[$DEV]:-${DATABASE[$DEV]}}
 DATABASE_PASS[$DEV]=${DATABASE_PASS[$DEV]:-"secret"}
 DATABASE_HOST[$DEV]=${DATABASE_HOST[$DEV]:-"localhost"}
+TMP_DIR[$DEV]=${TMP_DIR[$DEV]:-"/tmp"}
+
 
 DATABASE[$TEST]=${DATABASE[$TEST]:-${DATABASE[$DEV]}}
 DATABASE_USER[$TEST]=${DATABASE_USER[$TEST]:-${DATABASE_USER[$DEV]}}
 DATABASE_PASS[$TEST]=${DATABASE_PASS[$TEST]:-${DATABASE_PASS[$DEV]}}
 DATABASE_HOST[$TEST]=${DATABASE_HOST[$TEST]:-${DATABASE_HOST[$DEV]}}
+TMP_DIR[$TEST]=${TMP_DIR[$TEST]:-${TMP_DIR[$DEV]}}
 
 DATABASE[$PROD]=${DATABASE[$PROD]:-${DATABASE[$TEST]}}
 DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
+TMP_DIR[$PROD]=${TMP_DIR[$PROD]:-${TMP_DIR[$TEST]}}
 
 
 SITE_URL="dev.$PROJECT.se"
@@ -283,10 +290,12 @@ function build_drupal {
 				sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 			fi
 			## FILTER SETTINGS.PHP
-			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
-			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
+			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV" ${TMP_DIR[$REMOTE]}); i=0;
+			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@ @file.temporary.path@" | tr " " "\n")
 			do
-				sed -i.bak -e s/$SEARCH/${REPLACE[$i]}/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
+				## escape / to get sed to work
+				REPLACED_VALUE=${REPLACE[$i]//\//\\\/};
+				sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
 			done
 
 			rm -f tmp/sites/$SITE_NAME/*.bak
@@ -472,7 +481,22 @@ function deploy {
 	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
 	rm -rf tmp
 
-	for SITE in $PROJECT_LOCATION/sites/*
+    ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
+    if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
+            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
+            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
+    fi
+    ## Look for language files for all modules and themes
+    LANG_CMDS=()
+    for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
+    do
+        file=$(basename $f)
+        dir=$(basename $(dirname $f))
+        lang=$(echo $file | sed -e "s/.po//g" | sed -e "s/$dir.//g")
+        LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+    done
+
+    for SITE in $PROJECT_LOCATION/sites/*
 	do
 		SITE_NAME="$(basename $SITE)"
 
@@ -480,9 +504,10 @@ function deploy {
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
 
+
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-			COMMAND2="$DRUSH_CMD fra --yes"
-			COMMAND3="$DRUSH_CMD updb --yes"
+			COMMAND2="$DRUSH_CMD updb --yes"
+			COMMAND3="$DRUSH_CMD fra --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND5="$DRUSH_CMD cc all"
 
@@ -495,7 +520,13 @@ function deploy {
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND4"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND5"
 
-				echo "Sleep for 15 sec"
+                echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
+                for LANG_CMD in "${LANG_CMDS[@]}"
+                do
+                    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
+                done
+                
+   				echo "Sleep for 15 sec"
 				sleep 15
 			else
 				echo "Problems with $SITE_NAME, no database connection."
@@ -610,6 +641,9 @@ function content_update {
 
 			echo "Rsync sql-dump-file from server..."
 			rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
+
+			#Clean up by removing sql-dump.
+			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm /var/tmp/$PROJECT-$SITE_NAME.sql"
 
 			if [ "$ARG_TEST" == "TRUE" ]; then # Test content update
 
