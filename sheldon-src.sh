@@ -216,13 +216,6 @@ function exclude_files {
 	done
 }
 
-function rebuild_cache {
-	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
-		return 1
-	else
-		return 0
-	fi
-}
 
 # Can be called from Bamboo or locally
 function build_drupal {
@@ -236,7 +229,7 @@ function build_drupal {
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf tmp || true
 
-	if rebuild_cache; then
+	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
 	
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  drush make $PROJECT.make tmp > /dev/null || exit 1
@@ -551,7 +544,7 @@ function deploy {
 function reset_drupal {
 	set_deploydir;
 
-	if rebuild_cache; then
+	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
 		echo "Make file updated, running install."
 		install_drupal;
 	fi
