@@ -216,11 +216,11 @@ function exclude_files {
 	done
 }
 
-function is_cache_valid {
+function rebuild_cache {
 	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
-		return 0
-	else
 		return 1
+	else
+		return 0
 	fi
 }
 
@@ -236,7 +236,7 @@ function build_drupal {
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf tmp || true
 
-	if is_cache_valid; then
+	if rebuild_cache; then
 	
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  drush make $PROJECT.make tmp > /dev/null || exit 1
@@ -551,7 +551,7 @@ function deploy {
 function reset_drupal {
 	set_deploydir;
 
-	if is_cache_valid; then
+	if rebuild_cache; then
 		echo "Make file updated, running install."
 		install_drupal;
 	fi
