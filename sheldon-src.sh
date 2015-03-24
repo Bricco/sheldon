@@ -216,8 +216,12 @@ function exclude_files {
 	done
 }
 
-function is_cache_invalid {
-	return [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]];
+function is_cache_valid {
+	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
+		return 0
+	else
+		return 1
+	fi
 }
 
 # Can be called from Bamboo or locally
@@ -232,7 +236,7 @@ function build_drupal {
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf tmp || true
 
-	if is_cache_invalid; then
+	if is_cache_valid; then
 	
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  drush make $PROJECT.make tmp > /dev/null || exit 1
@@ -547,7 +551,7 @@ function deploy {
 function reset_drupal {
 	set_deploydir;
 
-	if is_cache_invalid; then
+	if is_cache_valid; then
 		echo "Make file updated, running install."
 		install_drupal;
 	fi
