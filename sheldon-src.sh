@@ -230,7 +230,7 @@ function build_drupal {
 	rm -rf tmp || true
 
 	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
-	
+
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  drush make $PROJECT.make tmp > /dev/null || exit 1
 
@@ -499,7 +499,7 @@ function deploy {
     do
         file=$(basename $f)
         dir=$(basename $(dirname $f))
-        lang=$(echo $file | sed -e "s/.po//g" | sed -e "s/$dir.//g")
+        lang=$(echo $file | sed -e "s/.po$//g" | sed -e "s/$dir.//g")
         LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
     done
 
@@ -532,7 +532,7 @@ function deploy {
                 do
                     ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
                 done
-                
+
    				echo "Sleep for 15 sec"
 				sleep 15
 			else
