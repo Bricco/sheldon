@@ -418,6 +418,11 @@ function install_drupal {
 		apache_install;
 	fi
 
+	read -ep "Do you want to update the database when the build is finished?
+(P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
+
+	read -ep "Do you want to run drush updbwhen the build is finished? [Y/n] " UPDB
+
 
 	build_drupal;
 	exclude_files;
@@ -444,16 +449,16 @@ function install_drupal {
 
 	echo "BUILD successfull"
 
-
-	read -ep "Do you want to update the database?
-(P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
-
 	if [ "$UPDATE" == "T" ]; then
 		ARG_FROM="TEST"
 		content_update;
 	elif [ "$UPDATE" == "P" ];then
 		ARG_FROM="PROD"
 		content_update;
+	fi
+
+	if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
+		drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y updb
 	fi
 
 	echo "You can now visit http://dev.$PROJECT.se"
