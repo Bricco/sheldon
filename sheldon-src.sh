@@ -423,6 +423,7 @@ function install_drupal {
 
 	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
 
+	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
 
 	build_drupal;
 	exclude_files;
@@ -457,9 +458,20 @@ function install_drupal {
 		content_update;
 	fi
 
-	if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
-		drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y updb
-	fi
+	for SITE in $PROJECT_LOCATION/sites/*; do
+		
+		SITE_NAME="$(basename $SITE)"
+
+		if [ "$SITE_NAME" != "all" ]; then
+			if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y updb
+			fi
+
+			if [[ "$FRA" == "Y" ||  "$FRA" == "y" ]]; then
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
+			fi
+		fi
+	done
 
 	echo "You can now visit http://dev.$PROJECT.se"
 	echo "Bazinga!"
