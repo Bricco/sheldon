@@ -421,7 +421,7 @@ function install_drupal {
 	read -ep "Do you want to update the database when the build is finished?
 (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
 
-	read -ep "Do you want to run drush updbwhen the build is finished? [Y/n] " UPDB
+	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
 
 
 	build_drupal;
