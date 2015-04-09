@@ -421,9 +421,9 @@ function install_drupal {
 	read -ep "Do you want to update the database when the build is finished?
 (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
 
-	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
-
 	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
+
+	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
 
 	build_drupal;
 	exclude_files;
@@ -526,8 +526,8 @@ function deploy {
 
 
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-			COMMAND2="$DRUSH_CMD updb --yes"
-			COMMAND3="$DRUSH_CMD fra --yes"
+			COMMAND2="$DRUSH_CMD fra --yes"
+			COMMAND3="$DRUSH_CMD updb --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND5="$DRUSH_CMD cc all"
 
