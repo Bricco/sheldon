@@ -459,17 +459,18 @@ function install_drupal {
 	fi
 
 	for SITE in $PROJECT_LOCATION/sites/*; do
-		
+
 		SITE_NAME="$(basename $SITE)"
 
 		if [ "$SITE_NAME" != "all" ]; then
+			if [[ "$FRA" == "Y" ||  "$FRA" == "y" ]]; then
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
+			fi
+
 			if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y updb
 			fi
 
-			if [[ "$FRA" == "Y" ||  "$FRA" == "y" ]]; then
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
-			fi
 		fi
 	done
 
