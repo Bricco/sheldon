@@ -279,6 +279,11 @@ function build_drupal {
 		cp "$PROJECT_LOCATION/robots.txt" "tmp/"
 	fi
 
+	## COPY scripts directory
+	if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
+		cp -r $PROJECT_LOCATION/scripts tmp
+	fi
+
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
 		SITE_NAME="$(basename $SITE)"
