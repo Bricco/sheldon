@@ -502,6 +502,10 @@ function deploy {
 	build_drupal;
 	exclude_files;
 
+	if [[ -e  "tmp/scripts/default.vcl" ]]; then
+		echo "Found Varnish conf"
+	fi
+
 	#RSYNC with delete,
 	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
 	rm -rf tmp
