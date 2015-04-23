@@ -563,6 +563,13 @@ function deploy {
 
 	fi
 
+	if [[ -d  "scripts" ]]; then
+
+    echo "Making shell scripts executable..."
+		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "${ROOT[$REMOTE]}/scripts/chmod a+x *.sh"
+
+	fi
+
 	rm -rf /tmp/$PROJECT
 
 }
