@@ -566,7 +566,7 @@ function deploy {
 	if [[ -d  "scripts" ]]; then
 
     echo "Making shell scripts executable..."
-		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "${ROOT[$REMOTE]}/scripts/chmod a+x *.sh"
+		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "chmod ${ROOT[$REMOTE]}/scripts a+x *.sh"
 
 	fi
 
