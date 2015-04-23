@@ -502,30 +502,26 @@ function deploy {
 	build_drupal;
 	exclude_files;
 
-	if [[ -e  "scripts/varnish.vcl" ]]; then
-		echo "Found Varnish conf"
-	fi
-
 	#RSYNC with delete,
 	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
 	rm -rf tmp
 
-    ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
-    if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
-            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
-            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
-    fi
-    ## Look for language files for all modules and themes
-    LANG_CMDS=()
-    for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
-    do
-        file=$(basename $f)
-        dir=$(basename $(dirname $f))
-        lang=$(echo $file | sed -e "s/.po$//g" | sed -e "s/$dir.//g")
-        LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
-    done
+  ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
+  if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
+          ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
+          ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
+  fi
+  ## Look for language files for all modules and themes
+  LANG_CMDS=()
+  for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
+  do
+      file=$(basename $f)
+      dir=$(basename $(dirname $f))
+      lang=$(echo $file | sed -e "s/.po$//g" | sed -e "s/$dir.//g")
+      LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+  done
 
-    for SITE in $PROJECT_LOCATION/sites/*
+  for SITE in $PROJECT_LOCATION/sites/*
 	do
 		SITE_NAME="$(basename $SITE)"
 
@@ -533,13 +529,11 @@ function deploy {
 		then
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
 
-
 			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
 			COMMAND2="$DRUSH_CMD fra --yes"
 			COMMAND3="$DRUSH_CMD updb --yes"
 			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 			COMMAND5="$DRUSH_CMD cc all"
-
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
 			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status Database") | grep -q "Connected" ; then
@@ -549,20 +543,33 @@ function deploy {
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND4"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND5"
 
-                echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
-                for LANG_CMD in "${LANG_CMDS[@]}"
-                do
-                    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
-                done
+        echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
+        for LANG_CMD in "${LANG_CMDS[@]}"
+        do
+            ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
+        done
 
-   				echo "Sleep for 15 sec"
+ 				echo "Sleep for 15 sec"
 				sleep 15
 			else
 				echo "Problems with $SITE_NAME, no database connection."
 			fi
-
 		fi
 	done
+
+	if [[ -e  "scripts/varnish.vcl" ]]; then
+
+    VCL_REMOTE=/mnt/persist/www/varnish.vcl
+    VCL_NEW="VCL_"$(date "+%Y%m%d_%H%M%S")
+
+    echo "Reloading Varnish conf file..."
+		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "varnishadm -S /etc/varnish/secret -T localhost:6082 vcl.load $VCL_NEW $VCL_REMOTE"
+		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "varnishadm -S /etc/varnish/secret -T localhost:6082 vcl.use $VCL_NEW"
+
+    echo "Clearing Varnish cache (without restart!)..."
+		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "varnishadm -S /etc/varnish/secret -T localhost:6082 ban.url ."
+
+	fi
 
 	rm -rf /tmp/$PROJECT
 
