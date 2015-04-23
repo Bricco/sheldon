@@ -502,7 +502,7 @@ function deploy {
 	build_drupal;
 	exclude_files;
 
-	if [[ -e  "tmp/scripts/default.vcl" ]]; then
+	if [[ -e  "tmp/scripts/varnish.vcl" ]]; then
 		echo "Found Varnish conf"
 	fi
 
