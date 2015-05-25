@@ -659,7 +659,7 @@ function content_update {
 			do
 				case "$T" in
 				  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-				  *search_index|*cache_*|*watchdog|*history|*sessions|*accesslog)
+				  *search_index|*cache_*|*watchdog|*sessions|*accesslog)
 				    EMPTY_TABLES="$EMPTY_TABLES $T"
 				    ;;
 				  *)
@@ -726,6 +726,8 @@ function content_update {
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME user-password admin --password=admin
 
+				drush -r "$DEPLOY_DIR/$PROJECT" -l role-add-perm 1 "access devel information"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l role-add-perm 2 "access devel information"
 			fi
 		fi
 	done
