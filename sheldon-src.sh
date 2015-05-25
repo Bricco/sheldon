@@ -726,8 +726,8 @@ function content_update {
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME user-password admin --password=admin
 
-				drush -r "$DEPLOY_DIR/$PROJECT" -l role-add-perm 1 "access devel information"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l role-add-perm 2 "access devel information"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 1 "access devel information"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 2 "access devel information"
 			fi
 		fi
 	done
