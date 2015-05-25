@@ -4,7 +4,7 @@ DEV=0
 TEST=1
 PROD=2
 
-DEV_MODULES="devel field_ui views_ui stage_file_proxy"
+DEV_MODULES="devel search_krumo field_ui views_ui stage_file_proxy"
 PROD_MODULES="memcahce varnish openx"
 
 
