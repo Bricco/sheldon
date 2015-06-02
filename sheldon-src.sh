@@ -308,7 +308,8 @@ function apache_install {
 	echo "Creating apache config file: $APACHE_VHOSTS_DIR/$PROJECT.conf"
 
 	VHOST="<VirtualHost *:80>
-	ServerName $SITE_URL"
+	ServerName $SITE_URL
+	ServerAlias admin.${PROJECT}.se"
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -318,9 +319,9 @@ function apache_install {
 		then
 	  	  continue
 		else
-		  SITE_URL="$SITE_URL dev.$SITE_NAME"
+		  SITE_URL="$SITE_URL dev.$SITE_NAME admin.$SITE_NAME"
 		  VHOST="$VHOST
-		  ServerAlias dev.$SITE_NAME"
+		  ServerAlias dev.$SITE_NAME admin.$SITE_NAME"
 		fi
 	done
 
@@ -659,7 +660,7 @@ function content_update {
 			do
 				case "$T" in
 				  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-				  *search_index|*cache_*|*watchdog|*sessions|*accesslog)
+				  *search_index|*cache_*|*cache|*watchdog|*sessions|*accesslog|*ctools_object_cache)
 				    EMPTY_TABLES="$EMPTY_TABLES $T"
 				    ;;
 				  *)
