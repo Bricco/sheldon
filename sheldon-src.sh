@@ -19,6 +19,7 @@ if [[ $EUID -eq 0 ]]; then
 fi
 
 PROJECT="$(basename *.make .make)"
+DATABASE_DEPENDENCIES=""
 
 if [ ! -e "$PROJECT.make" ]
 then
@@ -114,7 +115,7 @@ DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
 
-DATABASES=${DATABASES:-"default"}
+DATABASES="default $DATABASE_DEPENDENCIES"
 
 SITE_URL="dev.$PROJECT.se"
 
@@ -416,8 +417,8 @@ function install_drupal {
 	read -ep "Do you want to update the database when the build is finished?
 (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
 
-	if [[ "$UPDATE" == "P" || "$UPDATE" == "T" ]] && [[ "$DATABASES" != "default" ]]; then
-		read -ep "Do you want to update all the depending databases ($DATABASES) as well? [Y/n] " UPDATE_ALL
+	if [[ "$UPDATE" == "P" || "$UPDATE" == "T" ]] && [[ "$DATABASE_DEPENDENCIES" != "" ]]; then
+		read -ep "Do you want to update all the depending databases ($DATABASE_DEPENDENCIES) as well? [Y/n] " UPDATE_ALL
 	fi
 
 	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
