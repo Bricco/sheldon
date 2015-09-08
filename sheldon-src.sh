@@ -5,8 +5,6 @@ TEST=1
 PROD=2
 
 DEV_MODULES="devel search_krumo diff field_ui views_ui stage_file_proxy"
-PROD_MODULES="memcahce varnish openx"
-
 
 ARGV="$@"
 ARG="$1"
@@ -20,7 +18,7 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-PROJECT=${PROJECT:-"$(basename *.make .make)"}
+PROJECT="$(basename *.make .make)"
 
 if [ ! -e "$PROJECT.make" ]
 then
@@ -29,12 +27,11 @@ then
 fi
 
 ## READ PROPERTIES
-
 if [[ -e "sheldon.conf" ]]; then
 . sheldon.conf
 elif [[ -e "properties" ]]; then
 . properties
-echo "properties file is deprecated and will be now be renamed to sheldon.conf, please commit the changes."
+echo "properties file is deprecated and will now be renamed to sheldon.conf, please commit the changes."
 mv properties sheldon.conf
 else
   echo "sheldon.conf file must exist!"
@@ -90,9 +87,7 @@ eval set -- "$TEMP"
 while true ; do
 	case "$1" in
 		-f|--from) ARG_FROM=$2 ; shift 2 ;;
-		-t|--target) ARG_TARGET=$2 ; shift 2 ;;
 		-e|--env) ARG_ENV=$2; shift 2 ;;
-		-n|--name) ARG_NAME=$2 ; shift 2 ;;
 		--test) ARG_TEST="TRUE" ; shift ;;
 		--mamp) ARG_MAMP="TRUE" ; shift ;;
 		--no-cache) ARG_NOCACHE="TRUE" ; shift ;;
@@ -118,6 +113,8 @@ DATABASE[$PROD]=${DATABASE[$PROD]:-${DATABASE[$TEST]}}
 DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
+
+DATABASES=${DATABASES:-"default"}
 
 SITE_URL="dev.$PROJECT.se"
 
@@ -216,7 +213,6 @@ function build_drupal {
 		REMOTE=$DEV;
 	fi
 
-
 	## DRUSH MAKE
 	echo "Bulding $PROJECT.make, this can take a while..."
 	rm -rf tmp || true
@@ -234,16 +230,16 @@ function build_drupal {
 	  		echo "This project requires composer!"
 	  		echo "Install, and try again:"
 	  		echo "curl -sS https://getcomposer.org/installer | php"
-			echo "sudo mv composer.phar /usr/local/bin/composer"
-			exit 1;
+				echo "sudo mv composer.phar /usr/local/bin/composer"
+				exit 1;
 	  	fi
 	  fi
 
 	  mkdir -p ~/.sheldoncache
 	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
 	else
-	  	echo "Make file not changed since last build, fetching from cache..."
-		tar xfz ~/.sheldoncache/$PROJECT.tar.gz
+	  echo "Make file not changed since last build, fetching from cache..."
+		tar xf ~/.sheldoncache/$PROJECT.tar.gz
 	fi
 
 	echo "Drush make complete."
@@ -382,21 +378,22 @@ function mysql_install {
 	  SITE_NAME=$(basename "$SITE")
 	  if [[ $SITE_NAME != "all" ]]; then
 
-		drushargs="-l $SITE_NAME -r $DEPLOY_DIR/$PROJECT"
+			drushargs="-l $SITE_NAME -r $DEPLOY_DIR/$PROJECT"
+			for database in $DATABASES; do
+				DB_NAME=$(drush $drushargs sql-connect --database=$database | sed 's#.*database=\([^ ]*\).*#\1#g')
+				DB_PASS=$(drush $drushargs sql-connect --database=$database | sed 's#.*password=\([^ ]*\).*#\1#g')
+				DB_USER=$(drush $drushargs sql-connect --database=$database | sed 's#.*user=\([^ ]*\).*#\1#g')
+				DB_HOST=$(drush $drushargs sql-connect --database=$database | sed 's#.*host=\([^ ]*\).*#\1#g')
 
-		DB_NAME=$(drush $drushargs sql-connect | sed 's#.*database=\([^ ]*\).*#\1#g')
-		DB_PASS=$(drush $drushargs sql-connect | sed 's#.*password=\([^ ]*\).*#\1#g')
-		DB_USER=$(drush $drushargs sql-connect | sed 's#.*user=\([^ ]*\).*#\1#g')
-		DB_HOST=$(drush $drushargs sql-connect | sed 's#.*host=\([^ ]*\).*#\1#g')
-
-		if [[ $(echo "$DB_NAME" | tr -d ' ') != "" ]]; then
-		QUERY="CREATE DATABASE IF NOT EXISTS $DB_NAME;"
-			if [[ "$DB_USER" != "root" ]]; then
-			QUERY="$QUERY GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';"
-			fi
-		echo "mysql > $QUERY"
-		mysql -u root $MYSQL_ROOT_PASS -e "$QUERY" || exit 0
-		fi
+				if [[ $(echo "$DB_NAME" | tr -d ' ') != "" ]]; then
+					QUERY="CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+					if [[ "$DB_USER" != "root" ]]; then
+						QUERY="$QUERY GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';"
+					fi
+					echo "mysql > $QUERY"
+					mysql -u root $MYSQL_ROOT_PASS -e "$QUERY" || exit 0
+				fi
+			done
 	  fi
 	done
 
@@ -418,6 +415,10 @@ function install_drupal {
 
 	read -ep "Do you want to update the database when the build is finished?
 (P = from PROD, T = from TEST, n = No) [P/T/n] " UPDATE
+
+	if [[ "$UPDATE" == "P" || "$UPDATE" == "T" ]] && [[ "$DATABASES" != "default" ]]; then
+		read -ep "Do you want to update all the depending databases ($DATABASES) as well? [Y/n] " UPDATE_ALL
+	fi
 
 	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
 
@@ -446,7 +447,7 @@ function install_drupal {
 
 	mysql_install;
 
-	echo "BUILD successfull"
+	echo "BUILD successful"
 
 	if [ "$UPDATE" == "T" ]; then
 		ARG_FROM="TEST"
@@ -501,17 +502,17 @@ function deploy {
 
   ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
   if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
-          ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
-          ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
+    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
+    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
   fi
   ## Look for language files for all modules and themes
   LANG_CMDS=()
   for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
   do
-      file=$(basename $f)
-      dir=$(basename $(dirname $f))
-      lang=$(echo $file | sed -e "s/.po$//g" | sed -e "s/$dir.//g")
-      LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+    file=$(basename $f)
+    dir=$(basename $(dirname $f))
+    lang=$(echo $file | sed -e "s/.po$//g" | sed -e "s/$dir.//g")
+    LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
   done
 
   for SITE in $PROJECT_LOCATION/sites/*
@@ -621,6 +622,10 @@ function content_update {
 	if [[ "$ARG_TEST" != "TRUE" ]]; then
 		set_deploydir;
 	fi
+
+	if [[ "$ARG_TEST" == "TRUE" || "$UPDATE_ALL" != "Y" ]]; then
+		DATABASES="default";
+	fi
 	#mysql_root_access;
 
 	if [[ "$(which ssh-copy-id)" && "$(which ssh-keygen)" && "$ARG_TEST" != "TRUE" ]];then
@@ -642,86 +647,105 @@ function content_update {
 		SITE_NAME="$(basename $SITE)"
 
 		if [ "$SITE_NAME" != "all" ]; then
-		   DATESTAMP=$(date +%s)
-		   CONNECTION=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush sql-connect -r ${ROOT[$REMOTE]} -l $SITE_NAME" | sed 's#--database=##g' | sed 's#mysql ##g')
 
-		   OPTIONS="--no-autocommit --single-transaction --opt -Q"
+			for database in $DATABASES; do
+		   
+		   	DATESTAMP=$(date +%s)
+		   	CONNECTION=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush sql-connect --database=$database -r ${ROOT[$REMOTE]} -l $SITE_NAME" | sed 's#--database=##g' | sed 's#mysql ##g')
 
-		   echo "Running mysqldump command on server ($SITE_NAME)..."
-		   TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -Bse \"SHOW TABLES\"" || echo "ERROR");
+		   	OPTIONS="--no-autocommit --single-transaction --opt -Q"
 
-		   if echo $TABLES | grep -q "ERROR" ; then
-			echo "Couldn't connect to: mysql $CONNECTION"
-			continue;
-		   fi
-			EMPTY_TABLES="";
-			DATA_TABLES="";
+		   	echo "Running mysqldump command on server (site: $SITE_NAME db: $database)..."
+
+		   	TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -Bse \"SHOW TABLES\"" || echo "ERROR");
+
+		   	if echo $TABLES | grep -q "ERROR" ; then
+					echo "Couldn't connect to: mysql $CONNECTION"
+					continue;
+		   	fi
+				EMPTY_TABLES="";
+				DATA_TABLES="";
+
 		   	for T in $TABLES
-			do
-				case "$T" in
-				  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
-				  *search_index|*cache_*|*cache|*watchdog|*sessions|*accesslog|*ctools_object_cache)
-				    EMPTY_TABLES="$EMPTY_TABLES $T"
-				    ;;
-				  *)
-				    DATA_TABLES="$DATA_TABLES $T"
-				    ;;
-				esac
+				do
+					case "$T" in
+					  #ONLY MIGRATE TABLE STRUCTURE FROM THESE TABLES
+					  *search_index|*cache_*|*cache|*watchdog|*sessions|*accesslog|*ctools_object_cache)
+					    EMPTY_TABLES="$EMPTY_TABLES $T"
+					    ;;
+					  *)
+					    DATA_TABLES="$DATA_TABLES $T"
+					    ;;
+					esac
 		   	done
 
-			QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES > /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
-			QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES >> /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
-			QUERY="$QUERY && mv -f /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP /var/tmp/$PROJECT-$SITE_NAME.sql"
+				QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES > /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
+				QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES >> /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
+				QUERY="$QUERY && mv -f /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP /var/tmp/$PROJECT-$SITE_NAME.sql"
 
-			ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
+				ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
 
-			echo "Rsync sql-dump-file from server..."
-			rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
+				echo "Rsync sql-dump-file from server..."
+				rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
-			#Clean up by removing sql-dump.
-			ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm /var/tmp/$PROJECT-$SITE_NAME.sql"
+				#Clean up by removing sql-dump.
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm /var/tmp/$PROJECT-$SITE_NAME.sql"
 
-			if [ "$ARG_TEST" == "TRUE" ]; then # Test content update
+				if [ "$ARG_TEST" == "TRUE" ]; then # Test content update
 
-				TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect -r ${ROOT[$TEST]} -l $SITE_NAME")
+					TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect --database=$database -r ${ROOT[$TEST]} -l $SITE_NAME")
 
-				echo "Pushing sql-dump-file to TEST server..."
-				rsync -akzq /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
+					echo "Pushing sql-dump-file to TEST server..."
+					rsync -akzq /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
-				echo "Drop all tables in the TEST database"
-				ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
-				DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" 2> /dev/null || { echo "failed to drop all tables."; exit 1;}
+					echo "Drop all tables in the TEST database"
+					ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
+					DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
 
-				echo "Imports the sql-dump into the TEST database"
-				ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit 1
+					echo "Imports the sql-dump into the TEST database"
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit 1
 
+					
+					rm /var/tmp/$PROJECT-$SITE_NAME.sql
+
+				else # local update from PROD/TEST
+
+					DEVCONNECTION=$(drush sql-connect --database=$database -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
+
+					echo "Dropping all tables in local database"
+					$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION
+
+					echo "Updating local database"
+
+					if type pv &> /dev/null ; then
+						pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent
+					else
+						echo "Tip! Get a nice progress bar: sudo apt-get install pv"
+						$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql
+					fi
+
+				fi
+			done
+		fi
+	done
+
+	for SITE in $PROJECT_LOCATION/sites/*; do
+		SITE_NAME="$(basename $SITE)"
+
+		if [ "$SITE_NAME" != "all" ]; then
+
+			if [ "$ARG_TEST" == "TRUE" ]; then
 				echo "Enable dev modules and disable prod modules"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y" 2> /dev/null || exit 1
 				#ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME dis $PROD_MODULES -y"
-				rm /var/tmp/$PROJECT-$SITE_NAME.sql
 
-			else # local update from PROD/TEST
-
-				DEVCONNECTION=$(drush sql-connect -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
-
-				echo "Dropping all tables in local database"
-				$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION
-
-				echo "Updating local database"
-
-				if type pv &> /dev/null ; then
-					pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent
-				else
-					echo "Tip! Get a nice progress bar: sudo apt-get install pv"
-					$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql
-				fi
+			else
+				echo "Enabling following modules: $DEV_MODULES"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
 
 				#echo "Try to disable any of following modules: $PROD_MODULES"
 				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME dis $PROD_MODULES -y
-
-				echo "Enabling following modules: $DEV_MODULES"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
 
 				echo "Change admin login to: admin/admin"
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
@@ -729,13 +753,9 @@ function content_update {
 
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 1 "access devel information"
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 2 "access devel information"
-			fi
+		  fi
 		fi
 	done
-
-
-
-	echo "Bazinga!"
 
 }
 
