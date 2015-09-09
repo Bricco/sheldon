@@ -151,7 +151,7 @@ COMMANDS
 }
 
 function set_deploydir {
-	echo $DEPLOY_DIR;	
+	
   if [[ -z "$DEPLOY_DIR" ]]; then
 		read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
 	if  [ "$DEPLOY_DIR" == "" ]; then
