@@ -9,3 +9,7 @@ Drupal project tool
 sudo curl -s -o /usr/bin/sheldon https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon 
 sudo chmod +x /usr/bin/sheldon
 
+Specify your custom deploy-dir:
+echo "DEPLOY_DIR=/Users/maria/Sites" > ~/.sheldon.cnf
+
+

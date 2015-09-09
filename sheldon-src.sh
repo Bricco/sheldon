@@ -4,7 +4,7 @@ DEV=0
 TEST=1
 PROD=2
 
-DEV_MODULES="devel search_krumo diff field_ui views_ui stage_file_proxy"
+DEV_MODULES="devel search_krumo diff field_ui views_ui stage_file_proxy maillog"
 
 ARGV="$@"
 ARG="$1"
@@ -25,6 +25,10 @@ if [ ! -e "$PROJECT.make" ]
 then
   echo ".make file must exist!"
   exit 1;
+fi
+
+if [[ -e ~/.sheldon.cnf ]]; then
+	. ~/.sheldon.cnf
 fi
 
 ## READ PROPERTIES
@@ -147,8 +151,9 @@ COMMANDS
 }
 
 function set_deploydir {
+	echo $DEPLOY_DIR;	
   if [[ -z "$DEPLOY_DIR" ]]; then
-	read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
+		read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
 	if  [ "$DEPLOY_DIR" == "" ]; then
 		DEPLOY_DIR="/var/www"
 	fi
@@ -160,7 +165,7 @@ function set_deploydir {
 }
 
 function mysql_root_access {
-  if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]]; then
+  if [[ ! $MYSQL_ROOT_PASS_HAS_RUN ]] && [ -z ${MYSQL_ROOT_PASS+x} ]; then
     read -sp "Enter your MySQL password (ENTER for none): " MYSQL_ROOT_PASS
     echo;
 
