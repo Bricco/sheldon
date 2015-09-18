@@ -517,8 +517,9 @@ function deploy {
   do
     file=$(basename $f)
     dir=$(basename $(dirname $f))
-    lang=$(echo $file | sed -e "s/.po$//g" | sed -e "s/$dir.//g")
+    lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
     LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+    echo $LANG_CMDS;
   done
 
   for SITE in $PROJECT_LOCATION/sites/*
