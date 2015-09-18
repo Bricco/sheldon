@@ -547,6 +547,7 @@ function deploy {
         for LANG_CMD in "${LANG_CMDS[@]}"
         do
             ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
+            echo "$DRUSH_CMD $LANG_CMD"
         done
 
  				echo "Sleep for 15 sec"
