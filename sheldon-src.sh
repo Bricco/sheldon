@@ -519,7 +519,6 @@ function deploy {
     dir=$(basename $(dirname $f))
     lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
     LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
-    echo $LANG_CMDS;
   done
 
   for SITE in $PROJECT_LOCATION/sites/*
@@ -548,7 +547,6 @@ function deploy {
         for LANG_CMD in "${LANG_CMDS[@]}"
         do
             ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
-            echo "$DRUSH_CMD $LANG_CMD"
         done
 
  				echo "Sleep for 15 sec"
