@@ -79,9 +79,6 @@ else
   exit 1
 fi
 
-
-
-
 ## READ ARGUMENTS
 TEMP=`getopt -o f:t:e:n: --longoptions env:,target:,from:,name:,test,mamp,no-cache -n "sheldon" -- "$@"`
 
@@ -100,7 +97,6 @@ while true ; do
 		*) echo "Internal error!" ; exit 1 ;;
 	esac
 done
-
 
 PROJECT_LOCATION="$(pwd)"
 
@@ -508,7 +504,7 @@ function deploy {
 
   ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
   if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
-    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language"
+    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language-7.x-1.4"
     ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
   fi
   ## Look for language files for all modules and themes
