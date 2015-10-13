@@ -227,7 +227,7 @@ function build_drupal {
 	  if [[ -e composer.json ]]; then
 	  	if type composer >/dev/null 2>&1; then
 	  		cp composer.json tmp/composer.json
-	  		composer install --working-dir=tmp
+	  		composer install --ignore-platform-reqs --working-dir=tmp
 	  	else
 	  		echo "This project requires composer!"
 	  		echo "Install, and try again:"
