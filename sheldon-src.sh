@@ -750,7 +750,7 @@ function content_update {
 
 			else
 				echo "Enabling following modules: $DEV_MODULES"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y  > /dev/null 2>&1
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
 
 				#echo "Change admin login to: admin/admin"
 				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
