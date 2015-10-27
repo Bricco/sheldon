@@ -115,9 +115,10 @@ DATABASE_USER[$PROD]=${DATABASE_USER[$PROD]:-${DATABASE_USER[$TEST]}}
 DATABASE_PASS[$PROD]=${DATABASE_PASS[$PROD]:-${DATABASE_PASS[$TEST]}}
 DATABASE_HOST[$PROD]=${DATABASE_HOST[$PROD]:-${DATABASE_HOST[$TEST]}}
 
-DATABASES="default $DATABASE_DEPENDENCIES"
+DATABASES="$DATABASE_DEPENDENCIES default"
 
-SITE_URL="dev.$PROJECT.se"
+SITE_URL=${SITE_URL:-"dev.$PROJECT.se"}
+LOCAL_SERVER_ALIAS=${LOCAL_SERVER_ALIAS:-""}
 
 APACHE_CMD=apache2ctl
 APACHE_VHOSTS_DIR=/etc/apache2/sites-enabled
@@ -216,12 +217,15 @@ function build_drupal {
 	fi
 
 	## DRUSH MAKE
-	echo "Bulding $PROJECT.make, this can take a while..."
+
 	rm -rf tmp || true
 
 	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
 
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
+	  echo "
+	  Bulding $PROJECT.make...
+		"
 	  drush make $PROJECT.make tmp > /dev/null || exit 1
 
 	  if [[ -e composer.json ]]; then
@@ -236,17 +240,17 @@ function build_drupal {
 				exit 1;
 	  	fi
 	  fi
-
+	  echo "Drush make complete."
 	  mkdir -p ~/.sheldoncache
 	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
 	else
-	  echo "Make file not changed since last build, fetching from cache..."
+	  echo -e "\nMake file not changed since last build, fetching from cache.\n"
 		tar xf ~/.sheldoncache/$PROJECT.tar.gz
 	fi
 
-	echo "Drush make complete."
+	
 
-	echo "Copy custom profiles, modules, themes, .htaccess, robots.txt etc..."
+	echo "Copy custom profiles, modules, themes, .htaccess, robots.txt etc."
 
 	## COPY CUSTOM PROFILE
 	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
@@ -283,7 +287,7 @@ function build_drupal {
 			echo "Copy and filter sites/$SITE_NAME/settings.php"
 			mkdir -p "tmp/sites/$SITE_NAME/files"
 			if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
-				echo "Append environment constant \"define('ENVIRONMENT', '$ARG_ENV');\" to /sites/$SITE_NAME/settings.php"
+				echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
 				sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 			fi
 			## FILTER SETTINGS.PHP
@@ -307,7 +311,7 @@ function apache_install {
 
 	VHOST="<VirtualHost *:80>
 	ServerName $SITE_URL
-	ServerAlias admin.${PROJECT}.se"
+	ServerAlias admin.${PROJECT}.se ${LOCAL_SERVER_ALIAS}"
 
 	for SITE in $PROJECT_LOCATION/sites/*
 	do
@@ -339,15 +343,6 @@ function apache_install {
 		        allow from all
 		</Directory>
 
-		ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
-		<Directory \"/usr/lib/cgi-bin\">
-		        AllowOverride All
-		        Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
-		        Require all granted
-		        #Order allow,deny
-		        #Allow from all
-		</Directory>
-
 		ErrorLog /var/log/apache2/$PROJECT-error.log
 		LogLevel info
 
@@ -361,12 +356,14 @@ function apache_install {
 
 	</VirtualHost>" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null
 
-	if grep -q -E "127.0.0.1(\s*)$SITE_URL" /etc/hosts; then
-	  echo "domain already exists in host file, didn't add anything";
-	else
-	   echo "Adding domain(s) to /etc/hosts"
-	   echo -e "127.0.0.1 $SITE_URL" | sudo tee -a /etc/hosts
-	fi
+	for host_name in $(echo "$SITE_URL admin.${PROJECT}.se ${LOCAL_SERVER_ALIAS}" | tr " " "\n"); do
+		if grep -q -E "127.0.0.1(\s*)$host_name" /etc/hosts; then
+		  echo "$host_name already exists in host file.";
+		else
+		   echo "Adding domain to /etc/hosts"
+		   echo -e "127.0.0.1 ${host_name}" | sudo tee -a /etc/hosts
+		fi
+	done
 
 	echo -e "Restarting apache...\n"
 	sudo $APACHE_CMD restart > /dev/null 2>&1
@@ -392,8 +389,8 @@ function mysql_install {
 					if [[ "$DB_USER" != "root" ]]; then
 						QUERY="$QUERY GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';"
 					fi
-					echo "mysql > $QUERY"
-					mysql -u root $MYSQL_ROOT_PASS -e "$QUERY" || exit 0
+					echo -e "\nSet up the database and database user\nmysql > $QUERY"
+					mysql -u root $MYSQL_ROOT_PASS -e "$QUERY"  > /dev/null 2>&1 || exit 0
 				fi
 			done
 	  fi
@@ -406,7 +403,17 @@ function install_drupal {
 
 	ARG_ENV="DEV"
 
-	echo "Start installing $PROJECT"
+	echo "
+ _______  __   __  _______  ___      ______   _______  __    _ 
+|       ||  | |  ||       ||   |    |      | |       ||  |  | |
+|  _____||  |_|  ||    ___||   |    |  _    ||   _   ||   |_| |
+| |_____ |       ||   |___ |   |    | | |   ||  | |  ||       |
+|_____  ||       ||    ___||   |___ | |_|   ||  |_|  ||  _    |
+ _____| ||   _   ||   |___ |       ||       ||       || | |   |
+|_______||__| |__||_______||_______||______| |_______||_|  |__|
+                                                               
+                  Installing $PROJECT...
+"
 
 	set_deploydir;
 	mysql_root_access;
@@ -437,9 +444,9 @@ function install_drupal {
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
 	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
 
-	echo "Creating symlinks into workspace..."
-	echo "$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
-	echo "$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
+	echo "Creating symlinks into workspace:"
+	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
+	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
 
 	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
@@ -449,7 +456,7 @@ function install_drupal {
 
 	mysql_install;
 
-	echo "BUILD successful"
+	echo -e "BUILD complete\n"
 
 	if [ "$UPDATE" == "T" ]; then
 		ARG_FROM="TEST"
@@ -657,7 +664,7 @@ function content_update {
 
 		   	OPTIONS="--no-autocommit --single-transaction --opt -Q"
 
-		   	echo "Running mysqldump command on server (site: $SITE_NAME db: $database)..."
+		   	echo "Running mysqldump command on server (site: $SITE_NAME db: $database)"
 
 		   	TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -Bse \"SHOW TABLES\"" || echo "ERROR");
 
@@ -687,7 +694,7 @@ function content_update {
 
 				ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
 
-				echo "Rsync sql-dump-file from server..."
+				echo "Rsync sql-dump-file from server."
 				rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
 				#Clean up by removing sql-dump.
@@ -697,15 +704,15 @@ function content_update {
 
 					TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect --database=$database -r ${ROOT[$TEST]} -l $SITE_NAME")
 
-					echo "Pushing sql-dump-file to TEST server..."
+					echo "Pushing sql-dump-file to TEST server."
 					rsync -akzq /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
 
-					echo "Drop all tables in the TEST database"
+					echo "Drop all tables in the TEST database."
 					ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
 					DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
 					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
 
-					echo "Imports the sql-dump into the TEST database"
+					echo "Imports the sql-dump into the TEST database."
 					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit 1
 
 					
@@ -715,16 +722,16 @@ function content_update {
 
 					DEVCONNECTION=$(drush sql-connect --database=$database -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME)
 
-					echo "Dropping all tables in local database"
-					$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION
+					echo "Dropping all tables in local database."
+					$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION > /dev/null 2>&1
 
-					echo "Updating local database"
+					echo "Updating local database."
 
 					if type pv &> /dev/null ; then
-						pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent
+						pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent 2> /dev/null
 					else
 						echo "Tip! Get a nice progress bar: sudo apt-get install pv"
-						$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql
+						$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql > /dev/null 2>&1
 					fi
 
 				fi
@@ -738,23 +745,19 @@ function content_update {
 		if [ "$SITE_NAME" != "all" ]; then
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
-				echo "Enable dev modules and disable prod modules"
+				echo "Enable dev modules"
 				ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y" 2> /dev/null || exit 1
-				#ssh ${USER[$TEST]}@${HOST[$TEST]} "drush -r ${ROOT[$TEST]} -l $SITE_NAME dis $PROD_MODULES -y"
 
 			else
 				echo "Enabling following modules: $DEV_MODULES"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y  > /dev/null 2>&1
 
-				#echo "Try to disable any of following modules: $PROD_MODULES"
-				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME dis $PROD_MODULES -y
+				#echo "Change admin login to: admin/admin"
+				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
+				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME user-password admin --password=admin
 
-				echo "Change admin login to: admin/admin"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME user-password admin --password=admin
-
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 1 "access devel information"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 2 "access devel information"
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 1 "access devel information" > /dev/null 2>&1
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 2 "access devel information" > /dev/null 2>&1
 		  fi
 		fi
 	done
