@@ -4,7 +4,7 @@ DEV=0
 TEST=1
 PROD=2
 
-DEV_MODULES="devel search_krumo diff field_ui views_ui stage_file_proxy maillog"
+DEV_MODULES="maillog devel search_krumo field_ui views_ui stage_file_proxy"
 
 ARGV="$@"
 ARG="$1"
@@ -709,9 +709,10 @@ function content_update {
 
 					echo "Drop all tables in the TEST database."
 					ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
-					DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
-					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
-
+					if [[ "$ALL_TABLES" != "" ]]; then
+						DROP_COMMAND="SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS $ALL_TABLES;SET FOREIGN_KEY_CHECKS = 1;"
+						ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
+					fi
 					echo "Imports the sql-dump into the TEST database."
 					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit 1
 
@@ -750,7 +751,10 @@ function content_update {
 
 			else
 				echo "Enabling following modules: $DEV_MODULES"
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $DEV_MODULES -y
+				for module in $DEV_MODULES; do
+					drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $module -y
+				done
+				
 
 				#echo "Change admin login to: admin/admin"
 				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
