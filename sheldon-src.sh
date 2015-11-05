@@ -147,6 +147,13 @@ COMMANDS
     exit 0
 }
 
+containsElement () {
+	local array=($2)
+  local e
+  for e in ${array[@]}; do [[ "$e" == "$1" ]] && return 0;  done
+  return 1
+}
+
 function set_deploydir {
 	
   if [[ -z "$DEPLOY_DIR" ]]; then
@@ -376,6 +383,12 @@ function mysql_install {
 
 	  SITE_NAME=$(basename "$SITE")
 	  if [[ $SITE_NAME != "all" ]]; then
+
+	  	if [[ "$UPDATE_SITES" != "" ]]; then
+				 if ! containsElement "$SITE_NAME" "${UPDATE_SITES}"; then
+				 		continue;
+				 fi
+			fi
 
 			drushargs="-l $SITE_NAME -r $DEPLOY_DIR/$PROJECT"
 			for database in $DATABASES; do
@@ -657,6 +670,12 @@ function content_update {
 
 		if [ "$SITE_NAME" != "all" ]; then
 
+			if [[ "$UPDATE_SITES" != "" ]]; then
+				 if ! containsElement "$SITE_NAME" "${UPDATE_SITES}"; then
+				 		continue;
+				 fi
+			fi
+
 			for database in $DATABASES; do
 		   
 		   	DATESTAMP=$(date +%s)
@@ -744,6 +763,12 @@ function content_update {
 		SITE_NAME="$(basename $SITE)"
 
 		if [ "$SITE_NAME" != "all" ]; then
+
+			if [[ "$UPDATE_SITES" != "" ]]; then
+				 if ! containsElement "$SITE_NAME" "${UPDATE_SITES}"; then
+				 		continue;
+				 fi
+			fi
 
 			if [ "$ARG_TEST" == "TRUE" ]; then
 				echo "Enable dev modules"
