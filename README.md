@@ -6,8 +6,10 @@ sheldon
 Drupal project tool
 
 ### Installation ###
-sudo curl -s -o /usr/bin/sheldon https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon 
+echo -e "#!/bin/bash\nbash <(curl -s https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon-src.sh) ${@}" > /usr/local/bin/sheldon 
 sudo chmod +x /usr/bin/sheldon
+
+
 
 Specify your custom deploy-dir:
 echo "DEPLOY_DIR=/Users/maria/Sites" > ~/.sheldon.cnf
