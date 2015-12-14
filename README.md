@@ -6,9 +6,9 @@ sheldon
 Drupal project tool
 
 ### Installation ###
-echo -e "#!/bin/bash\nbash <(curl -s https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon-src.sh) ${@}" > /usr/local/bin/sheldon 
+echo -e "#\!/bin/bash\nbash <(curl -s https://raw.githubusercontent.com/Bricco/sheldon/master/sheldon-src.sh) ${@}" > /usr/local/bin/sheldon 
 
-sudo chmod +x /usr/bin/sheldon
+sudo chmod +x /usr/local/bin/sheldon
 
 
 
