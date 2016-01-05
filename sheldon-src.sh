@@ -459,7 +459,7 @@ function install_drupal {
 
 	echo "Creating symlinks into workspace:"
 	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
-	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
+	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/themes/custom -> $PROJECT_LOCATION/sites/all/themes/custom"
 
 	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
 	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
@@ -552,7 +552,7 @@ function deploy {
 			COMMAND5="$DRUSH_CMD cc all"
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
-			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status Database") | grep -q "Connected" ; then
+			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status bootstrap Database") | grep -q -E "Connected|Successful" ; then
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND1"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND2"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
