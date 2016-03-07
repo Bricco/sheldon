@@ -4,6 +4,8 @@ DEV=0
 TEST=1
 PROD=2
 
+CORE=7
+
 DEV_MODULES="maillog devel search_krumo field_ui views_ui stage_file_proxy"
 
 ARGV="$@"
@@ -25,6 +27,14 @@ if [ ! -e "$PROJECT.make" ]
 then
   echo ".make file must exist!"
   exit 1;
+fi
+
+if grep -q -i 'core \?= \?8.x' "$PROJECT.make"; then
+	#Drupal 8
+	CORE=8
+elif grep -q -i 'core \?= \?6.x' "$PROJECT.make"; then
+	#Drupal 6
+	CORE=6
 fi
 
 if [[ -e ~/.sheldon.cnf ]]; then
@@ -202,7 +212,7 @@ function exclude_files {
 		done
 	fi
 
-	for SITE in $PROJECT_LOCATION/sites/*
+	for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME="$(basename $SITE)"
 
@@ -255,15 +265,7 @@ function build_drupal {
 		tar xf ~/.sheldoncache/$PROJECT.tar.gz
 	fi
 
-	
-
 	echo "Copy custom profiles, modules, themes, .htaccess, robots.txt etc."
-
-	## COPY CUSTOM PROFILE
-	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
-
-	## COPY SITES
-	cp -r "$PROJECT_LOCATION/sites" "tmp/" || true > /dev/null 2>&1
 
 	## COPY .htaccess
 	if [[ -e  "$PROJECT_LOCATION/htaccess.htaccess" ]]; then
@@ -275,40 +277,67 @@ function build_drupal {
 		cp -r $PROJECT_LOCATION/root_files/* tmp/
 	fi
 
+	## COPY CUSTOM PROFILES
+	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
+
 	## COPY robots.txt
 	if [[ -e  "$PROJECT_LOCATION/robots.txt" ]]; then
 		cp "$PROJECT_LOCATION/robots.txt" "tmp/"
 	fi
 
-	## COPY scripts directory
-	if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
-		cp -r $PROJECT_LOCATION/scripts tmp
+	## COPY SITES
+	cp -r "$PROJECT_LOCATION/sites" "tmp/" || true > /dev/null 2>&1
+
+
+	if [[ "$CORE" != "8" ]]; then
+
+		#Drupal 6 & Drupal 7
+
+		## COPY scripts directory
+		if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
+			cp -r $PROJECT_LOCATION/scripts tmp
+		fi
+
+	else
+		#Drupal 8
+
+		## COPY Configuration
+		cp -r "$PROJECT_LOCATION/sync" "tmp/" || true > /dev/null 2>&1
+
+		## COPY Modules
+		cp -r "$PROJECT_LOCATION/modules" "tmp/" || true > /dev/null 2>&1
+
+		## COPY Themes
+		cp -r "$PROJECT_LOCATION/themes" "tmp/" || true > /dev/null 2>&1
+
 	fi
 
-	for SITE in $PROJECT_LOCATION/sites/*
-	do
-		SITE_NAME="$(basename $SITE)"
+	for SITE in $PROJECT_LOCATION/sites/*/
+		do
+			SITE_NAME="$(basename $SITE)"
 
-		if [ $SITE_NAME != "all" ]
-		then
-			echo "Copy and filter sites/$SITE_NAME/settings.php"
-			mkdir -p "tmp/sites/$SITE_NAME/files"
-			if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
-				echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
-				sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
+			if [ $SITE_NAME != "all" ]
+			then
+				echo "Copy and filter sites/$SITE_NAME/settings.php"
+				mkdir -p "tmp/sites/$SITE_NAME/files"
+				if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
+					echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
+					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
+				fi
+
+				echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sync';\n" >> tmp/sites/$SITE_NAME/settings.php
+				## FILTER SETTINGS.PHP
+				REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
+				for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
+				do
+					## escape / to get sed to work
+					REPLACED_VALUE=${REPLACE[$i]//\//\\\/};
+					sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
+				done
+
+				rm -f tmp/sites/$SITE_NAME/*.bak
 			fi
-			## FILTER SETTINGS.PHP
-			REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
-			for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
-			do
-				## escape / to get sed to work
-				REPLACED_VALUE=${REPLACE[$i]//\//\\\/};
-				sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
-			done
-
-			rm -f tmp/sites/$SITE_NAME/*.bak
-		fi
-	done
+		done
 
 }
 
@@ -320,7 +349,7 @@ function apache_install {
 	ServerName $SITE_URL
 	ServerAlias admin.${PROJECT}.se ${LOCAL_SERVER_ALIAS}"
 
-	for SITE in $PROJECT_LOCATION/sites/*
+	for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME=$(basename "$SITE")
 
@@ -378,8 +407,7 @@ function apache_install {
 
 function mysql_install {
 
-	for SITE in $PROJECT_LOCATION/sites/*
-	do
+	for SITE in $PROJECT_LOCATION/sites/*/; do
 
 	  SITE_NAME=$(basename "$SITE")
 	  if [[ $SITE_NAME != "all" ]]; then
@@ -426,6 +454,7 @@ function install_drupal {
 |_______||__| |__||_______||_______||______| |_______||_|  |__|
                                                                
                   Installing $PROJECT...
+                  Core = Drupal $CORE
 "
 
 	set_deploydir;
@@ -453,17 +482,40 @@ function install_drupal {
 	rsync --delete -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
 	rm -rf tmp
 
-	## MAKE SURE THESE FOLDERS EXISTS
-	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
-	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
+	if [[ "$CORE" != "8" ]]; then
 
-	echo "Creating symlinks into workspace:"
-	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
-	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/themes/custom -> $PROJECT_LOCATION/sites/all/themes/custom"
+		## MAKE SURE THESE FOLDERS EXISTS
+		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
+		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
 
-	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
-	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
-	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
+		echo "Creating symlinks into workspace:"
+		echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
+		echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/themes/custom -> $PROJECT_LOCATION/sites/all/themes/custom"
+
+		## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
+		cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
+		cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
+
+	else
+
+		sudo mkdir -p "$DEPLOY_DIR/$PROJECT"
+		## MAKE SURE THESE FOLDERS EXISTS
+		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/modules"
+		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/themes"
+		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sync"
+
+		echo "Creating symlinks into workspace:"
+		echo -e "\t$DEPLOY_DIR/$PROJECT/modules/custom -> $PROJECT_LOCATION/modules/custom"
+		echo -e "\t$DEPLOY_DIR/$PROJECT/themes/custom -> $PROJECT_LOCATION/themes/custom"
+		echo -e "\t$DEPLOY_DIR/$PROJECT/sync -> $PROJECT_LOCATION/sync"
+
+		## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
+		cd "$DEPLOY_DIR/$PROJECT/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/modules/custom" custom
+		cd "$DEPLOY_DIR/$PROJECT/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/themes/custom" custom
+		cd "$DEPLOY_DIR/$PROJECT";sudo rm -rf sync || true; sudo ln -s "$PROJECT_LOCATION/sync" sync
+
+
+	fi
 
 	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT"
 
@@ -479,7 +531,7 @@ function install_drupal {
 		content_update;
 	fi
 
-	for SITE in $PROJECT_LOCATION/sites/*; do
+	for SITE in $PROJECT_LOCATION/sites/*/; do
 
 		SITE_NAME="$(basename $SITE)"
 
@@ -519,45 +571,53 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete --cvs-exclude -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
+	rsync --delete -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
 	rm -rf tmp
 
-  ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
-  if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
-    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language-7.x-1.4"
-    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
-  fi
-  ## Look for language files for all modules and themes
-  LANG_CMDS=()
-  for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
-  do
-    file=$(basename $f)
-    dir=$(basename $(dirname $f))
-    lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
-    LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
-  done
-
-  for SITE in $PROJECT_LOCATION/sites/*
+	# https://www.drupal.org/project/drush_language not ready for D8 yet.
+	if [[ "$CORE" != "8" ]]; then 
+	  ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
+	  if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
+	    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language-7.x-1.4"
+	    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
+	  fi
+	  ## Look for language files for all modules and themes
+	  LANG_CMDS=()
+	  for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
+	  do
+	    file=$(basename $f)
+	    dir=$(basename $(dirname $f))
+	    lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
+	    LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+	  done
+	fi
+  for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME="$(basename $SITE)"
 
-		if [ $SITE_NAME != "all" ]
-		then
+		if [[ "$SITE_NAME" != "all" ]]; then
+
 			DRUSH_CMD="drush -l $SITE_NAME -r ${ROOT[$REMOTE]}"
 
-			COMMAND1="$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-			COMMAND2="$DRUSH_CMD fra --yes"
-			COMMAND3="$DRUSH_CMD updb --yes"
-			COMMAND4="$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-			COMMAND5="$DRUSH_CMD cc all"
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
 			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status bootstrap Database") | grep -q -E "Connected|Successful" ; then
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND1"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND2"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND3"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND4"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$COMMAND5"
+				
+				if [[ "$CORE" == "8" ]]; then
+					
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD state-set maintenance_mode 1"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD config-import sync --skip-modules='$DEV_MODULES' --cache-clear=0 --yes"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD updb --yes"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD state-set maintenance_mode 0"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cache-rebuild"
+
+				else
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD fra --yes"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD updb --yes"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cc all"
+				fi
 
         echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
         for LANG_CMD in "${LANG_CMDS[@]}"
@@ -606,7 +666,7 @@ function reset_drupal {
 		install_drupal;
 	fi
 
-	for SITE in $PROJECT_LOCATION/sites/*
+	for SITE in $PROJECT_LOCATION/sites/*/
 		do
 			SITE_NAME="$(basename $SITE)"
 
@@ -664,7 +724,7 @@ function content_update {
 		fi
 	fi
 
-	for SITE in $PROJECT_LOCATION/sites/*
+	for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME="$(basename $SITE)"
 
@@ -759,7 +819,7 @@ function content_update {
 		fi
 	done
 
-	for SITE in $PROJECT_LOCATION/sites/*; do
+	for SITE in $PROJECT_LOCATION/sites/*/; do
 		SITE_NAME="$(basename $SITE)"
 
 		if [ "$SITE_NAME" != "all" ]; then
