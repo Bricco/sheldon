@@ -325,7 +325,10 @@ function build_drupal {
 					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 				fi
 
-				echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sync';\n" >> tmp/sites/$SITE_NAME/settings.php
+				if [[ "$CORE" == "8" ]]; then
+					echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sync';\n" >> tmp/sites/$SITE_NAME/settings.php
+				fi
+
 				## FILTER SETTINGS.PHP
 				REPLACE=(${DATABASE[$REMOTE]} ${DATABASE_USER[$REMOTE]} ${DATABASE_HOST[$REMOTE]} ${DATABASE_PASS[$REMOTE]} "$ARG_ENV"); i=0;
 				for SEARCH in $(echo "@db.database@ @db.username@ @db.host@ @db.password@ @settings.ENVIRONMENT@" | tr " " "\n")
