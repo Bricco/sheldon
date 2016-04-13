@@ -479,8 +479,12 @@ function install_drupal {
 		read -ep "Do you want to update all the depending databases ($DATABASE_DEPENDENCIES) as well? [Y/n] " UPDATE_ALL
 	fi
 
-	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
-
+	if [[ "$CORE" != "8" ]]; then
+		read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
+	else
+		read -ep "Do you want to run drush config-import when the build is finished? [Y/n] " FRA
+	fi
+	
 	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
 
 	build_drupal;
@@ -534,7 +538,6 @@ function install_drupal {
 		## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
 		cd "$DEPLOY_DIR/$PROJECT/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/modules/custom" custom
 		cd "$DEPLOY_DIR/$PROJECT/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/themes/custom" custom
-		cd "$DEPLOY_DIR/$PROJECT";sudo rm -rf sync || true; sudo ln -s "$PROJECT_LOCATION/sync" sync
 
 
 	fi
@@ -559,7 +562,11 @@ function install_drupal {
 
 		if [ "$SITE_NAME" != "all" ]; then
 			if [[ "$FRA" == "Y" ||  "$FRA" == "y" ]]; then
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
+				if [[ "$CORE" == "8" ]]; then
+				  drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y config-import sync
+				else
+				  drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
+				fi
 			fi
 
 			if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
