@@ -278,7 +278,7 @@ function build_drupal {
 
 	## COPY root_files/*
 	if [[ -d  "$PROJECT_LOCATION/root_files" ]]; then
-		cp -r $PROJECT_LOCATION/root_files/* tmp/
+		cp -r $PROJECT_LOCATION/root_files/* tmp/ > /dev/null 2>&1 || true
 	fi
 
 	## COPY CUSTOM PROFILES
@@ -323,7 +323,7 @@ function build_drupal {
 				mkdir -p "tmp/sites/$SITE_NAME/files"
 				if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
 					echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
-					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" /tmp/sites/$SITE_NAME/settings.php
+					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
 				fi
 
 				if [[ "$CORE" == "8" ]]; then
