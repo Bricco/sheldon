@@ -239,7 +239,7 @@ function build_drupal {
 
 	## DRUSH MAKE
 
-	rm -rf $PROJECT_LOCATION/tmp > /dev/null 2>&1 || true
+	rm -rf tmp > /dev/null 2>&1 || true
 
 	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT_LOCATION/$PROJECT.make ]] || [[ -e $PROJECT_LOCATION/composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
 
@@ -247,12 +247,12 @@ function build_drupal {
 	  echo "
 	  Bulding $PROJECT.make...
 		"
-	  drush make $PROJECT_LOCATION/$PROJECT.make $PROJECT_LOCATION/tmp > /dev/null || exit 1
+	  drush make $PROJECT_LOCATION/$PROJECT.make tmp > /dev/null || exit 1
 
 	  if [[ -e composer.json ]]; then
 	  	if type composer > /dev/null 2>&1; then
-	  		cp composer.json $PROJECT_LOCATION/tmp/composer.json
-	  		composer install --ignore-platform-reqs --working-dir=$PROJECT_LOCATION/tmp
+	  		cp composer.json tmp/composer.json
+	  		composer install --ignore-platform-reqs --working-dir=tmp
 	  	else
 	  		echo "This project requires composer!"
 	  		echo "Install, and try again:"
@@ -263,7 +263,7 @@ function build_drupal {
 	  fi
 	  echo "Drush make complete."
 	  mkdir -p ~/.sheldoncache
-	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz $PROJECT_LOCATION/tmp
+	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
 	else
 	  echo -e "\nMake file not changed since last build, fetching from cache.\n"
 		tar xf ~/.sheldoncache/$PROJECT.tar.gz
@@ -273,24 +273,24 @@ function build_drupal {
 
 	## COPY .htaccess
 	if [[ -e  "$PROJECT_LOCATION/htaccess.htaccess" ]]; then
-		cp "$PROJECT_LOCATION/htaccess.htaccess" "$PROJECT_LOCATION/tmp/.htaccess"
+		cp "$PROJECT_LOCATION/htaccess.htaccess" "tmp/.htaccess"
 	fi
 
 	## COPY root_files/*
 	if [[ -d  "$PROJECT_LOCATION/root_files" ]]; then
-		cp -r $PROJECT_LOCATION/root_files/* $PROJECT_LOCATION/tmp/
+		cp -r $PROJECT_LOCATION/root_files/* tmp/
 	fi
 
 	## COPY CUSTOM PROFILES
-	cp -r "$PROJECT_LOCATION/profiles" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
+	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
 
 	## COPY robots.txt
 	if [[ -e  "$PROJECT_LOCATION/robots.txt" ]]; then
-		cp "$PROJECT_LOCATION/robots.txt" "$PROJECT_LOCATION/tmp/"
+		cp "$PROJECT_LOCATION/robots.txt" "tmp/"
 	fi
 
 	## COPY SITES
-	cp -r "$PROJECT_LOCATION/sites" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
+	cp -r "$PROJECT_LOCATION/sites" "tmp/" > /dev/null 2>&1 || true
 
 
 	if [[ "$CORE" != "8" ]]; then
@@ -299,17 +299,17 @@ function build_drupal {
 
 		## COPY scripts directory
 		if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
-			cp -r $PROJECT_LOCATION/scripts $PROJECT_LOCATION/tmp
+			cp -r $PROJECT_LOCATION/scripts tmp
 		fi
 
 	else
 		#Drupal 8
 
 		## COPY Modules
-		cp -r "$PROJECT_LOCATION/modules" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
+		cp -r "$PROJECT_LOCATION/modules" "tmp/" > /dev/null 2>&1 || true
 
 		## COPY Themes
-		cp -r "$PROJECT_LOCATION/themes" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
+		cp -r "$PROJECT_LOCATION/themes" "tmp/" > /dev/null 2>&1 || true
 
 	fi
 
@@ -321,16 +321,16 @@ function build_drupal {
 			then
 				echo "Copy and filter sites/$SITE_NAME/settings.php"
 				mkdir -p "tmp/sites/$SITE_NAME/files"
-				if ! grep -q "define('ENVIRONMENT'" $PROJECT_LOCATION/tmp/sites/$SITE_NAME/settings.php; then
+				if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
 					echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
-					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" $PROJECT_LOCATION/tmp/sites/$SITE_NAME/settings.php
+					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" /tmp/sites/$SITE_NAME/settings.php
 				fi
 
 				if [[ "$CORE" == "8" ]]; then
 					## COPY Configuration
-					cp -r "$PROJECT_LOCATION/sites/$SITE_NAME/config" "$PROJECT_LOCATION/tmp/sites/$SITE_NAME/" > /dev/null 2>&1 || true
+					cp -r "$PROJECT_LOCATION/sites/$SITE_NAME/config" "tmp/sites/$SITE_NAME/" > /dev/null 2>&1 || true
 					
-					echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/$SITE_NAME/config/sync';\n" >> $PROJECT_LOCATION/tmp/sites/$SITE_NAME/settings.php
+					echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/$SITE_NAME/config/sync';\n" >> tmp/sites/$SITE_NAME/settings.php
 				fi
 
 				## FILTER SETTINGS.PHP
@@ -339,10 +339,10 @@ function build_drupal {
 				do
 					## escape / to get sed to work
 					REPLACED_VALUE=${REPLACE[$i]//\//\\\/};
-					sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g $PROJECT_LOCATION/tmp/sites/$SITE_NAME/*settings.php; ((i++));
+					sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
 				done
 
-				rm -f $PROJECT_LOCATION/tmp/sites/$SITE_NAME/*.bak
+				rm -f tmp/sites/$SITE_NAME/*.bak
 			fi
 		done
 
@@ -494,8 +494,8 @@ function install_drupal {
 
 	
 	#RSYNC with delete,
-	rsync --delete -al $EXCLUDE $PROJECT_LOCATION/tmp/ $DEPLOY_DIR/$PROJECT/
-	rm -rf $PROJECT_LOCATION/tmp
+	rsync --delete -al $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
+	rm -rf tmp
 
 	if [[ "$CORE" != "8" ]]; then
 
@@ -608,8 +608,8 @@ function deploy {
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete -alz $EXCLUDE $PROJECT_LOCATION/tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
-	rm -rf $PROJECT_LOCATION/tmp
+	rsync --delete -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
+	rm -rf tmp
 
 	# https://www.drupal.org/project/drush_language not ready for D8 yet.
 	if [[ "$CORE" != "8" ]]; then 
@@ -690,8 +690,6 @@ function deploy {
 		ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "chmod a+x ${ROOT[$REMOTE]}/scripts/*.sh"
 
 	fi
-
-	rm -rf $PROJECT_LOCATION/tmp/$PROJECT
 
 }
 
