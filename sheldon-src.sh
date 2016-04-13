@@ -32,6 +32,10 @@ fi
 if grep -q -i 'core \?= \?8.x' "$PROJECT.make"; then
 	#Drupal 8
 	CORE=8
+	if ! drush --version | grep 8. >/dev/null 2>&1; then
+		echo "You need drush version 8.x for drupal 8!"
+		exit 1;
+	fi
 elif grep -q -i 'core \?= \?6.x' "$PROJECT.make"; then
 	#Drupal 6
 	CORE=6
@@ -235,20 +239,20 @@ function build_drupal {
 
 	## DRUSH MAKE
 
-	rm -rf tmp || true
+	rm -rf $PROJECT_LOCATION/tmp > /dev/null 2>&1 || true
 
-	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
+	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT_LOCATION/$PROJECT.make ]] || [[ -e $PROJECT_LOCATION/composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
 
-	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
+	  rm ~/.sheldoncache/$PROJECT.tar.gz > /dev/null 2>&1 || true
 	  echo "
 	  Bulding $PROJECT.make...
 		"
-	  drush make $PROJECT.make tmp > /dev/null || exit 1
+	  drush make $PROJECT_LOCATION/$PROJECT.make $PROJECT_LOCATION/tmp > /dev/null || exit 1
 
 	  if [[ -e composer.json ]]; then
-	  	if type composer >/dev/null 2>&1; then
-	  		cp composer.json tmp/composer.json
-	  		composer install --ignore-platform-reqs --working-dir=tmp
+	  	if type composer > /dev/null 2>&1; then
+	  		cp composer.json $PROJECT_LOCATION/tmp/composer.json
+	  		composer install --ignore-platform-reqs --working-dir=$PROJECT_LOCATION/tmp
 	  	else
 	  		echo "This project requires composer!"
 	  		echo "Install, and try again:"
@@ -259,7 +263,7 @@ function build_drupal {
 	  fi
 	  echo "Drush make complete."
 	  mkdir -p ~/.sheldoncache
-	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
+	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz $PROJECT_LOCATION/tmp
 	else
 	  echo -e "\nMake file not changed since last build, fetching from cache.\n"
 		tar xf ~/.sheldoncache/$PROJECT.tar.gz
@@ -269,24 +273,24 @@ function build_drupal {
 
 	## COPY .htaccess
 	if [[ -e  "$PROJECT_LOCATION/htaccess.htaccess" ]]; then
-		cp "$PROJECT_LOCATION/htaccess.htaccess" "tmp/.htaccess"
+		cp "$PROJECT_LOCATION/htaccess.htaccess" "$PROJECT_LOCATION/tmp/.htaccess"
 	fi
 
 	## COPY root_files/*
 	if [[ -d  "$PROJECT_LOCATION/root_files" ]]; then
-		cp -r $PROJECT_LOCATION/root_files/* tmp/
+		cp -r $PROJECT_LOCATION/root_files/* $PROJECT_LOCATION/tmp/
 	fi
 
 	## COPY CUSTOM PROFILES
-	cp -r "$PROJECT_LOCATION/profiles" "tmp/" > /dev/null 2>&1 || true
+	cp -r "$PROJECT_LOCATION/profiles" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
 
 	## COPY robots.txt
 	if [[ -e  "$PROJECT_LOCATION/robots.txt" ]]; then
-		cp "$PROJECT_LOCATION/robots.txt" "tmp/"
+		cp "$PROJECT_LOCATION/robots.txt" "$PROJECT_LOCATION/tmp/"
 	fi
 
 	## COPY SITES
-	cp -r "$PROJECT_LOCATION/sites" "tmp/" || true > /dev/null 2>&1
+	cp -r "$PROJECT_LOCATION/sites" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
 
 
 	if [[ "$CORE" != "8" ]]; then
@@ -295,20 +299,17 @@ function build_drupal {
 
 		## COPY scripts directory
 		if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
-			cp -r $PROJECT_LOCATION/scripts tmp
+			cp -r $PROJECT_LOCATION/scripts $PROJECT_LOCATION/tmp
 		fi
 
 	else
 		#Drupal 8
 
-		## COPY Configuration
-		cp -r "$PROJECT_LOCATION/sync" "tmp/" || true > /dev/null 2>&1
-
 		## COPY Modules
-		cp -r "$PROJECT_LOCATION/modules" "tmp/" || true > /dev/null 2>&1
+		cp -r "$PROJECT_LOCATION/modules" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
 
 		## COPY Themes
-		cp -r "$PROJECT_LOCATION/themes" "tmp/" || true > /dev/null 2>&1
+		cp -r "$PROJECT_LOCATION/themes" "$PROJECT_LOCATION/tmp/" > /dev/null 2>&1 || true
 
 	fi
 
@@ -320,13 +321,16 @@ function build_drupal {
 			then
 				echo "Copy and filter sites/$SITE_NAME/settings.php"
 				mkdir -p "tmp/sites/$SITE_NAME/files"
-				if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
+				if ! grep -q "define('ENVIRONMENT'" $PROJECT_LOCATION/tmp/sites/$SITE_NAME/settings.php; then
 					echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
-					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
+					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" $PROJECT_LOCATION/tmp/sites/$SITE_NAME/settings.php
 				fi
 
 				if [[ "$CORE" == "8" ]]; then
-					echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sync';\n" >> tmp/sites/$SITE_NAME/settings.php
+					## COPY Configuration
+					cp -r "$PROJECT_LOCATION/sites/$SITE_NAME/config" "$PROJECT_LOCATION/tmp/sites/$SITE_NAME/" > /dev/null 2>&1 || true
+					
+					echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/$SITE_NAME/config/sync';\n" >> $PROJECT_LOCATION/tmp/sites/$SITE_NAME/settings.php
 				fi
 
 				## FILTER SETTINGS.PHP
@@ -335,10 +339,10 @@ function build_drupal {
 				do
 					## escape / to get sed to work
 					REPLACED_VALUE=${REPLACE[$i]//\//\\\/};
-					sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g tmp/sites/$SITE_NAME/*settings.php; ((i++));
+					sed -i.bak -e s/$SEARCH/$REPLACED_VALUE/g $PROJECT_LOCATION/tmp/sites/$SITE_NAME/*settings.php; ((i++));
 				done
 
-				rm -f tmp/sites/$SITE_NAME/*.bak
+				rm -f $PROJECT_LOCATION/tmp/sites/$SITE_NAME/*.bak
 			fi
 		done
 
@@ -370,34 +374,34 @@ function apache_install {
 	echo "$VHOST
 	DocumentRoot $DEPLOY_DIR/$PROJECT/
 
-		<Directory />
-		        Options +FollowSymLinks
-		        AllowOverride All
-		</Directory>
-		<Directory $DEPLOY_DIR/$PROJECT>
-		        Options +FollowSymLinks -Indexes
-		        AllowOverride All
-			Require all granted
-		        Order allow,deny
-		        allow from all
-		</Directory>
+	<Directory />
+		Options +FollowSymLinks
+		AllowOverride All
+	</Directory>
+	<Directory $DEPLOY_DIR/$PROJECT>
+		Options +FollowSymLinks -Indexes
+		AllowOverride All
+		Require all granted
+		Order allow,deny
+		allow from all
+	</Directory>
 
-		ErrorLog /var/log/apache2/$PROJECT-error.log
-		LogLevel info
+	ErrorLog /var/log/apache2/$PROJECT-error.log
+	LogLevel info
 
-                <IfModule mod_php5.c>
-                  php_flag  display_errors        on
-		  php_flag  log_errors        	  on
-		  php_flag  mysql.trace_mode      on
-                  php_value error_reporting       32767
-                </IfModule>
+	<IfModule mod_php5.c>
+		php_flag	display_errors		on
+		php_flag	log_errors		on
+		php_flag	mysql.trace_mode	on
+		php_value	error_reporting		32767
+	</IfModule>
 
-
-	</VirtualHost>" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null
+</VirtualHost>
+" | sudo tee $APACHE_VHOSTS_DIR/$PROJECT.conf > /dev/null
 
 	for host_name in $(echo "$SITE_URL admin.${PROJECT}.se ${LOCAL_SERVER_ALIAS}" | tr " " "\n"); do
 		if grep -q -E "127.0.0.1(\s*)$host_name" /etc/hosts; then
-		  echo "$host_name already exists in host file.";
+		  echo "$host_name already exists in hosts file.";
 		else
 		   echo "Adding domain to /etc/hosts"
 		   echo -e "127.0.0.1 ${host_name}" | sudo tee -a /etc/hosts
@@ -474,16 +478,24 @@ function install_drupal {
 		read -ep "Do you want to update all the depending databases ($DATABASE_DEPENDENCIES) as well? [Y/n] " UPDATE_ALL
 	fi
 
-	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
+	if [[ "$CORE" != "8" ]]; then
+		read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
+	else
+		read -ep "Do you want to run drush config-import when the build is finished? [Y/n] " FRA
+	fi
 
 	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
 
 	build_drupal;
 	exclude_files;
 
+	sudo mkdir -p $DEPLOY_DIR/$PROJECT/
+	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT" 
+
+	
 	#RSYNC with delete,
-	rsync --delete -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
-	rm -rf tmp
+	rsync --delete -al $EXCLUDE $PROJECT_LOCATION/tmp/ $DEPLOY_DIR/$PROJECT/
+	rm -rf $PROJECT_LOCATION/tmp
 
 	if [[ "$CORE" != "8" ]]; then
 
@@ -501,27 +513,40 @@ function install_drupal {
 
 	else
 
-		sudo mkdir -p "$DEPLOY_DIR/$PROJECT"
 		## MAKE SURE THESE FOLDERS EXISTS
 		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/modules"
 		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/themes"
-		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sync"
 
 		echo "Creating symlinks into workspace:"
 		echo -e "\t$DEPLOY_DIR/$PROJECT/modules/custom -> $PROJECT_LOCATION/modules/custom"
 		echo -e "\t$DEPLOY_DIR/$PROJECT/themes/custom -> $PROJECT_LOCATION/themes/custom"
-		echo -e "\t$DEPLOY_DIR/$PROJECT/sync -> $PROJECT_LOCATION/sync"
+
+		for SITE in $PROJECT_LOCATION/sites/*/; do
+
+			SITE_NAME="$(basename $SITE)"
+
+			if [[ "$SITE_NAME" != "all" ]]; then
+				echo -e "\t$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME/config -> $PROJECT_LOCATION/sites/$SITE_NAME/config"
+					sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME"
+					cd "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME"; 
+					sudo rm -rf config || true; 
+					sudo ln -s "$PROJECT_LOCATION/sites/$SITE_NAME/config" config
+			fi
+		done
+		
 
 		## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
-		cd "$DEPLOY_DIR/$PROJECT/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/modules/custom" custom
-		cd "$DEPLOY_DIR/$PROJECT/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/themes/custom" custom
-		cd "$DEPLOY_DIR/$PROJECT";sudo rm -rf sync || true; sudo ln -s "$PROJECT_LOCATION/sync" sync
+		cd "$DEPLOY_DIR/$PROJECT/modules";
+		sudo rm -rf custom || true; 
+		sudo ln -s "$PROJECT_LOCATION/modules/custom" custom
 
+		cd "$DEPLOY_DIR/$PROJECT/themes";
+		sudo rm -rf custom || true; 
+		sudo ln -s "$PROJECT_LOCATION/themes/custom" custom
 
 	fi
 
 	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT"
-
 	mysql_install;
 
 	echo -e "BUILD complete\n"
@@ -540,7 +565,11 @@ function install_drupal {
 
 		if [ "$SITE_NAME" != "all" ]; then
 			if [[ "$FRA" == "Y" ||  "$FRA" == "y" ]]; then
-				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
+				if [[ "$CORE" == "8" ]]; then
+					drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y config-import sync 
+				else
+					drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
+				fi
 			fi
 
 			if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
@@ -558,6 +587,7 @@ function install_drupal {
 # Only called from Bamboo
 function deploy {
 
+
 	if [ "$ARG_ENV" == "PROD" ]; then
 	  REMOTE=$PROD
 	else
@@ -570,12 +600,16 @@ function deploy {
 		exit 1;
 	fi
 
+	echo -e "\n\n#################################"
+	echo "This deploy will update ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}";
+	echo -e "####################\n\n"
+
 	build_drupal;
 	exclude_files;
 
 	#RSYNC with delete,
-	rsync --delete -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
-	rm -rf tmp
+	rsync --delete -alz $EXCLUDE $PROJECT_LOCATION/tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
+	rm -rf $PROJECT_LOCATION/tmp
 
 	# https://www.drupal.org/project/drush_language not ready for D8 yet.
 	if [[ "$CORE" != "8" ]]; then 
@@ -657,7 +691,7 @@ function deploy {
 
 	fi
 
-	rm -rf /tmp/$PROJECT
+	rm -rf $PROJECT_LOCATION/tmp/$PROJECT
 
 }
 
