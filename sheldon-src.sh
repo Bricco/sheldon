@@ -30,12 +30,8 @@ then
 fi
 
 if grep -q -i 'core \?= \?8.x' "$PROJECT.make"; then
-	#Drupal 8
-	CORE=8
-	if ! drush --version | grep 8. >/dev/null 2>&1; then
-	  echo "You need drush version 8.x for drupal 8!"
-	  exit 1;
-	fi
+  echo "Sheldon doesn't support drupal 8!"
+  exit 1;
 elif grep -q -i 'core \?= \?6.x' "$PROJECT.make"; then
 	#Drupal 6
 	CORE=6
@@ -292,26 +288,9 @@ function build_drupal {
 	## COPY SITES
 	cp -r "$PROJECT_LOCATION/sites" "tmp/" || true > /dev/null 2>&1
 
-
-	if [[ "$CORE" != "8" ]]; then
-
-		#Drupal 6 & Drupal 7
-
-		## COPY scripts directory
-		if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
-			cp -r $PROJECT_LOCATION/scripts tmp
-		fi
-
-	else
-		#Drupal 8
-
-
-		## COPY Modules
-		cp -r "$PROJECT_LOCATION/modules" "tmp/" || true > /dev/null 2>&1
-
-		## COPY Themes
-		cp -r "$PROJECT_LOCATION/themes" "tmp/" || true > /dev/null 2>&1
-
+	## COPY scripts directory
+	if [[ -d  "$PROJECT_LOCATION/scripts" ]]; then
+		cp -r $PROJECT_LOCATION/scripts tmp
 	fi
 
 	for SITE in $PROJECT_LOCATION/sites/*/
@@ -325,13 +304,6 @@ function build_drupal {
 				if ! grep -q "define('ENVIRONMENT'" tmp/sites/$SITE_NAME/settings.php; then
 					echo "set ENVIRONMENT = $ARG_ENV in /sites/$SITE_NAME/settings.php"
 					sed -i.bak -e "s/<?php/<?php define(\'ENVIRONMENT\', \'$ARG_ENV\');/g" tmp/sites/$SITE_NAME/settings.php
-				fi
-
-				if [[ "$CORE" == "8" ]]; then
-					## COPY Configuration
-					cp -r "$PROJECT_LOCATION/sites/$SITE_NAME/config" "tmp/sites/$SITE_NAME/" > /dev/null 2>&1 || true
-          echo -e "\$config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/$SITE_NAME/config/sync';\n" >> tmp/sites/$SITE_NAME/settings.php
-
 				fi
 
 				## FILTER SETTINGS.PHP
@@ -479,12 +451,7 @@ function install_drupal {
 		read -ep "Do you want to update all the depending databases ($DATABASE_DEPENDENCIES) as well? [Y/n] " UPDATE_ALL
 	fi
 
-	if [[ "$CORE" != "8" ]]; then
-		read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
-	else
-		read -ep "Do you want to run drush config-import when the build is finished? [Y/n] " FRA
-	fi
-	
+	read -ep "Do you want to revert all features when the build is finished? [Y/n] " FRA
 	read -ep "Do you want to run drush updb when the build is finished? [Y/n] " UPDB
 
 	build_drupal;
@@ -494,53 +461,20 @@ function install_drupal {
 	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT"
 
 	#RSYNC with delete,
-	rsync --delete -alz $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
+	rsync --delete -al $EXCLUDE tmp/ $DEPLOY_DIR/$PROJECT/
 	rm -rf tmp
 
-	if [[ "$CORE" != "8" ]]; then
+	## MAKE SURE THESE FOLDERS EXISTS
+	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
+	sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
 
-		## MAKE SURE THESE FOLDERS EXISTS
-		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/modules"
-		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/all/themes"
+	echo "Creating symlinks into workspace:"
+	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
+	echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/themes/custom -> $PROJECT_LOCATION/sites/all/themes/custom"
 
-		echo "Creating symlinks into workspace:"
-		echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/modules/custom -> $PROJECT_LOCATION/sites/all/modules/custom"
-		echo -e "\t$DEPLOY_DIR/$PROJECT/sites/all/themes/custom -> $PROJECT_LOCATION/sites/all/themes/custom"
-
-		## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
-		cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
-		cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
-
-	else
-
-		## MAKE SURE THESE FOLDERS EXISTS
-		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/modules"
-		sudo mkdir -p "$DEPLOY_DIR/$PROJECT/themes"
-
-
-		echo "Creating symlinks into workspace:"
-		echo -e "\t$DEPLOY_DIR/$PROJECT/modules/custom -> $PROJECT_LOCATION/modules/custom"
-		echo -e "\t$DEPLOY_DIR/$PROJECT/themes/custom -> $PROJECT_LOCATION/themes/custom"
-
-   for SITE in $PROJECT_LOCATION/sites/*/; do
-
-			SITE_NAME="$(basename $SITE)"
-
-			if [[ "$SITE_NAME" != "all" ]]; then
-			       echo -e "\t$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME/config -> $PROJECT_LOCATION/sites/$SITE_NAME/config"
-			               sudo mkdir -p "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME"
-			               cd "$DEPLOY_DIR/$PROJECT/sites/$SITE_NAME";
-			               sudo rm -rf config || true;
-			               sudo ln -s "$PROJECT_LOCATION/sites/$SITE_NAME/config" config
-			fi
-   	done
-
-		## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
-		cd "$DEPLOY_DIR/$PROJECT/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/modules/custom" custom
-		cd "$DEPLOY_DIR/$PROJECT/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/themes/custom" custom
-
-
-	fi
+	## SYMLINK CUSTOM MODULES AND THEMES IN TO WORKSPACE
+	cd "$DEPLOY_DIR/$PROJECT/sites/all/modules";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/modules/custom" custom
+	cd "$DEPLOY_DIR/$PROJECT/sites/all/themes";sudo rm -rf custom || true; sudo ln -s "$PROJECT_LOCATION/sites/all/themes/custom" custom
 
 	sudo chown -R $USER:$GROUP "$DEPLOY_DIR/$PROJECT"
 
@@ -562,11 +496,7 @@ function install_drupal {
 
 		if [ "$SITE_NAME" != "all" ]; then
 			if [[ "$FRA" == "Y" ||  "$FRA" == "y" ]]; then
-				if [[ "$CORE" == "8" ]]; then
-				  drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y config-import sync
-				else
-				  drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
-				fi
+				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME -y fra
 			fi
 
 			if [[ "$UPDB" == "Y" ||  "$UPDB" == "y" ]]; then
@@ -596,9 +526,9 @@ function deploy {
 		exit 1;
 	fi
 
-	echo -e "\n\n#################################"
+	echo -e "\n\n####################\n"
 	echo "This deploy will update ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}";
-	echo -e "####################\n\n"
+	echo -e "\n####################\n\n"
 
 	build_drupal;
 	exclude_files;
@@ -607,23 +537,21 @@ function deploy {
 	rsync --delete -alz $EXCLUDE tmp/ ${USER[$REMOTE]}@${HOST[$REMOTE]}:${ROOT[$REMOTE]}/ || exit 1
 	rm -rf tmp
 
-	# https://www.drupal.org/project/drush_language not ready for D8 yet.
-	if [[ "$CORE" != "8" ]]; then 
-	  ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
-	  if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
-	    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language-7.x-1.4"
-	    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
-	  fi
-	  ## Look for language files for all modules and themes
-	  LANG_CMDS=()
-	  for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
-	  do
-	    file=$(basename $f)
-	    dir=$(basename $(dirname $f))
-	    lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
-	    LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
-	  done
-	fi
+  ## Install Drush plugin drush_language (https://www.drupal.org/project/drush_language)
+  if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush") | grep -q -v "language-import"; then
+    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush dl drush_language-7.x-1.4"
+    ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush cache-clear drush"
+  fi
+  ## Look for language files for all modules and themes
+  LANG_CMDS=()
+  for f in $(find sites/all/modules/custom/ sites/all/themes/custom/ -name '*.po')
+  do
+    file=$(basename $f)
+    dir=$(basename $(dirname $f))
+    lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
+    LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
+  done
+	
   for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME="$(basename $SITE)"
@@ -635,22 +563,12 @@ function deploy {
 
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
 			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status bootstrap Database") | grep -q -E "Connected|Successful" ; then
-				
-				if [[ "$CORE" == "8" ]]; then
-					
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD state-set maintenance_mode 1"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD config-import sync --skip-modules='$DEV_MODULES' --cache-clear=0 --yes"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD updb --yes"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD state-set maintenance_mode 0"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cache-rebuild"
 
-				else
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD fra --yes"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD updb --yes"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
-					ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cc all"
-				fi
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD fra --yes"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD updb --yes"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cc all"
 
         echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
         for LANG_CMD in "${LANG_CMDS[@]}"
@@ -688,31 +606,6 @@ function deploy {
 	fi
 
 	rm -rf /tmp/$PROJECT
-
-}
-
-function reset_drupal {
-	set_deploydir;
-
-	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
-		echo "Make file updated, running install."
-		install_drupal;
-	fi
-
-	for SITE in $PROJECT_LOCATION/sites/*/
-		do
-			SITE_NAME="$(basename $SITE)"
-
-			if [ $SITE_NAME != "all" ]; then
-
-				if [[ $(drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME status Database | tail -2 | head -1 | sed -e 's/.*\?\(Connected\)/\1/g') == "Connected" ]]; then
-
-					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME fra -y
-					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME updb -y
-					drush -r $DEPLOY_DIR/$PROJECT -l $SITE_NAME cc all -y
-				fi
-			fi
-		done
 
 }
 
@@ -757,6 +650,17 @@ function content_update {
 		fi
 	fi
 
+	# Check amount of free disk space!
+	# Require 2gb
+	diskspace=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "df -k /var/tmp | tail -1 | awk '{ print \$4 }' ")
+
+	if [[ "$diskspace" < "$((1024*1024*2))" ]]; then
+		echo "The disk on the server is too full, $(( $diskspace / 1024 )) MB Avail. Clean up!"
+		exit 1;
+	else
+		echo "It's $(( $diskspace / 1024 )) MB free disk space on the server..."
+	fi
+
 	for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME="$(basename $SITE)"
@@ -771,11 +675,27 @@ function content_update {
 
 			for database in $DATABASES; do
 		   
-		   	DATESTAMP=$(date +%s)
 		   	CONNECTION=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush sql-connect --database=$database -r ${ROOT[$REMOTE]} -l $SITE_NAME" | sed 's#--database=##g' | sed 's#mysql ##g')
 
 		   	OPTIONS="--no-autocommit --single-transaction --opt -Q"
+		   	DUMPNAME="$PROJECT-$SITE_NAME.sql.bz2"
+		   	DUMPFILE="/var/tmp/$DUMPNAME"
 
+		   	if [[ "$ARG_TEST" != "TRUE" ]]; then
+
+			   	mtime="$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} stat -c %Y $DUMPFILE)";
+
+			   	if [[ "$mtime" != "" && "$mtime" > "$((`date +"%s"` - 3600 ))" ]]; then
+			   		echo "WARNING!"
+				   	echo "A file named $DUMPFILE already existst on the server and is less than 1h old."
+				   	echo ""
+				   	read -ep "Continue anyway? [Y/n] " FORCE_DUMP
+				   	if [[ "$FORCE_DUMP" != 'Y' && "$FORCE_DUMP" != 'y' ]]; then
+				   		echo "Abort";
+				   	 	exit 1;
+				   	fi  
+					fi
+				fi
 		   	echo "Running mysqldump command on server (site: $SITE_NAME db: $database)"
 
 		   	TABLES=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "mysql $CONNECTION -Bse \"SHOW TABLES\"" || echo "ERROR");
@@ -800,24 +720,23 @@ function content_update {
 					esac
 		   	done
 
-				QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES > /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
-				QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES >> /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP"
-				QUERY="$QUERY && mv -f /var/tmp/$PROJECT-$SITE_NAME.sql-$DATESTAMP /var/tmp/$PROJECT-$SITE_NAME.sql"
-
+				QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES | bzip2 > $DUMPFILE"
+				QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES | bzip2 >> $DUMPFILE"
+		
 				ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
 
 				echo "Rsync sql-dump-file from server."
-				rsync -akzq ${USER[$REMOTE]}@${HOST[$REMOTE]}:/var/tmp/$PROJECT-$SITE_NAME.sql /var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
+				rsync -akq ${USER[$REMOTE]}@${HOST[$REMOTE]}:$DUMPFILE /var/tmp/$DUMPNAME 2> /dev/null || exit 1
 
-				#Clean up by removing sql-dump.
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm /var/tmp/$PROJECT-$SITE_NAME.sql"
+				#Clean up by removing the sql-dump.
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm $DUMPFILE"
 
 				if [ "$ARG_TEST" == "TRUE" ]; then # Test content update
 
 					TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect --database=$database -r ${ROOT[$TEST]} -l $SITE_NAME")
 
 					echo "Pushing sql-dump-file to TEST server."
-					rsync -akzq /var/tmp/$PROJECT-$SITE_NAME.sql ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$PROJECT-$SITE_NAME.sql 2> /dev/null || exit 1
+					rsync -akq /var/tmp/$DUMPNAME ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$DUMPNAME 2> /dev/null || exit 1
 
 					echo "Drop all tables in the TEST database."
 					ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
@@ -826,10 +745,13 @@ function content_update {
 						ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
 					fi
 					echo "Imports the sql-dump into the TEST database."
-					ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql" 2> /dev/null || exit 1
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "bzcat /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" 2> /dev/null || exit 1
 
-					
-					rm /var/tmp/$PROJECT-$SITE_NAME.sql
+					#Remove local file
+					rm /var/tmp/$DUMPNAME
+					#Remove from the test server
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "rm $DUMPFILE"
+
 
 				else # local update from PROD/TEST
 
@@ -839,13 +761,7 @@ function content_update {
 					$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION > /dev/null 2>&1
 
 					echo "Updating local database."
-
-					if type pv &> /dev/null ; then
-						pv /var/tmp/$PROJECT-$SITE_NAME.sql | $DEVCONNECTION --silent 2> /dev/null
-					else
-						echo "Tip! Get a nice progress bar: sudo apt-get install pv"
-						$DEVCONNECTION --silent < /var/tmp/$PROJECT-$SITE_NAME.sql > /dev/null 2>&1
-					fi
+					bzcat /var/tmp/$DUMPNAME | $DEVCONNECTION --silent > /dev/null 2>&1
 
 				fi
 			done
@@ -873,11 +789,6 @@ function content_update {
 					drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $module -y
 				done
 				
-
-				#echo "Change admin login to: admin/admin"
-				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME sql-query --db-prefix "UPDATE {users} SET name = 'admin' WHERE uid=1"
-				#drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME user-password admin --password=admin
-
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 1 "access devel information" > /dev/null 2>&1
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 2 "access devel information" > /dev/null 2>&1
 		  fi
@@ -896,9 +807,6 @@ update|content-update)
     ;;
 deploy)
    deploy
-    ;;
-reset)
-   reset_drupal
     ;;
 *)
 	usage
