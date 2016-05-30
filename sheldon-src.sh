@@ -165,7 +165,7 @@ containsElement () {
 }
 
 function set_deploydir {
-	
+
   if [[ -z "$DEPLOY_DIR" ]]; then
 		read -ep "Where is your deploy dir? (/var/www): " DEPLOY_DIR
 	if  [ "$DEPLOY_DIR" == "" ]; then
@@ -425,14 +425,14 @@ function install_drupal {
 	ARG_ENV="DEV"
 
 	echo "
- _______  __   __  _______  ___      ______   _______  __    _ 
+ _______  __   __  _______  ___      ______   _______  __    _
 |       ||  | |  ||       ||   |    |      | |       ||  |  | |
 |  _____||  |_|  ||    ___||   |    |  _    ||   _   ||   |_| |
 | |_____ |       ||   |___ |   |    | | |   ||  | |  ||       |
 |_____  ||       ||    ___||   |___ | |_|   ||  |_|  ||  _    |
  _____| ||   _   ||   |___ |       ||       ||       || | |   |
 |_______||__| |__||_______||_______||______| |_______||_|  |__|
-                                                               
+
                   Installing $PROJECT...
                   Core = Drupal $CORE
 "
@@ -551,7 +551,7 @@ function deploy {
     lang=$(echo $file | sed -e "s/\.po$//g" | sed -e "s/^.*\.//g")
     LANG_CMDS=("${LANG_CMDS[@]}" "language-import $lang $f --replace")
   done
-	
+
   for SITE in $PROJECT_LOCATION/sites/*/
 	do
 		SITE_NAME="$(basename $SITE)"
@@ -576,8 +576,8 @@ function deploy {
             ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD $LANG_CMD"
         done
 
- 				echo "Sleep for 15 sec"
-				sleep 15
+ 				#echo "Sleep for 15 sec"
+				#sleep 15
 			else
 				echo "Problems with $SITE_NAME, no database connection."
 			fi
@@ -654,7 +654,7 @@ function content_update {
 	# Require 2gb
 	diskspace=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "df -k /var/tmp | tail -1 | awk '{ print \$4 }' ")
 
-	if [[ "$diskspace" < "$((1024*1024*2))" ]]; then
+	if [[ "$diskspace" < "$((1024*1024))" ]]; then
 		echo "The disk on the server is too full, $(( $diskspace / 1024 )) MB Avail. Clean up!"
 		exit 1;
 	else
@@ -674,11 +674,11 @@ function content_update {
 			fi
 
 			for database in $DATABASES; do
-		   
+
 		   	CONNECTION=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "drush sql-connect --database=$database -r ${ROOT[$REMOTE]} -l $SITE_NAME" | sed 's#--database=##g' | sed 's#mysql ##g')
 
 		   	OPTIONS="--no-autocommit --single-transaction --opt -Q"
-		   	DUMPNAME="$PROJECT-$SITE_NAME.sql.bz2"
+		   	DUMPNAME="$PROJECT-$SITE_NAME.sql.gz"
 		   	DUMPFILE="/var/tmp/$DUMPNAME"
 
 		   	if [[ "$ARG_TEST" != "TRUE" ]]; then
@@ -693,7 +693,7 @@ function content_update {
 				   	if [[ "$FORCE_DUMP" != 'Y' && "$FORCE_DUMP" != 'y' ]]; then
 				   		echo "Abort";
 				   	 	exit 1;
-				   	fi  
+				   	fi
 					fi
 				fi
 		   	echo "Running mysqldump command on server (site: $SITE_NAME db: $database)"
@@ -720,9 +720,9 @@ function content_update {
 					esac
 		   	done
 
-				QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES | bzip2 > $DUMPFILE"
-				QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES | bzip2 >> $DUMPFILE"
-		
+				QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES | gzip > $DUMPFILE"
+				QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES | gzip >> $DUMPFILE"
+
 				ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
 
 				echo "Rsync sql-dump-file from server."
@@ -745,7 +745,7 @@ function content_update {
 						ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
 					fi
 					echo "Imports the sql-dump into the TEST database."
-					ssh ${USER[$TEST]}@${HOST[$TEST]} "bzcat /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" 2> /dev/null || exit 1
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "gzcat /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" 2> /dev/null || exit 1
 
 					#Remove local file
 					rm /var/tmp/$DUMPNAME
@@ -761,7 +761,7 @@ function content_update {
 					$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION > /dev/null 2>&1
 
 					echo "Updating local database."
-					bzcat /var/tmp/$DUMPNAME | $DEVCONNECTION --silent > /dev/null 2>&1
+					gzcat /var/tmp/$DUMPNAME | $DEVCONNECTION --silent > /dev/null 2>&1
 
 				fi
 			done
@@ -788,7 +788,7 @@ function content_update {
 				for module in $DEV_MODULES; do
 					drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME en --resolve-dependencies $module -y
 				done
-				
+
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 1 "access devel information" > /dev/null 2>&1
 				drush -r "$DEPLOY_DIR/$PROJECT" -l $SITE_NAME role-add-perm 2 "access devel information" > /dev/null 2>&1
 		  fi
