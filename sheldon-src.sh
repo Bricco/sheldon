@@ -745,7 +745,7 @@ function content_update {
 						ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
 					fi
 					echo "Imports the sql-dump into the TEST database."
-					ssh ${USER[$TEST]}@${HOST[$TEST]} "gzcat /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" || exit 1
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "gunzip -c /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" || exit 1
 
 					#Remove local file
 					rm /var/tmp/$DUMPNAME || false
@@ -761,7 +761,7 @@ function content_update {
 					$DEVCONNECTION -BNe "show tables" | tr '\n' ',' | sed -e 's/,$//' | awk '{print "SET FOREIGN_KEY_CHECKS = 0;DROP TABLE IF EXISTS " $1 ";SET FOREIGN_KEY_CHECKS = 1;"}' | $DEVCONNECTION > /dev/null 2>&1
 
 					echo "Updating local database."
-					gzcat /var/tmp/$DUMPNAME | $DEVCONNECTION --silent > /dev/null 2>&1
+					gunzip -c /var/tmp/$DUMPNAME | $DEVCONNECTION --silent > /dev/null 2>&1
 
 				fi
 			done
