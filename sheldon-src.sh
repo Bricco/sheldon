@@ -723,10 +723,10 @@ function content_update {
 				QUERY="mysqldump $OPTIONS --add-drop-table $CONNECTION $DATA_TABLES | gzip > $DUMPFILE"
 				QUERY="$QUERY && mysqldump --no-data $OPTIONS $CONNECTION $EMPTY_TABLES | gzip >> $DUMPFILE"
 
-				ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY 2> /dev/null || exit 1
+				ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} $QUERY || exit 1
 
 				echo "Rsync sql-dump-file from server."
-				rsync -akq ${USER[$REMOTE]}@${HOST[$REMOTE]}:$DUMPFILE /var/tmp/$DUMPNAME 2> /dev/null || exit 1
+				rsync -akq ${USER[$REMOTE]}@${HOST[$REMOTE]}:$DUMPFILE /var/tmp/$DUMPNAME || exit 1
 
 				#Clean up by removing the sql-dump.
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "rm $DUMPFILE"
@@ -736,7 +736,7 @@ function content_update {
 					TESTCONNECTION=$(ssh -q ${USER[$TEST]}@${HOST[$TEST]} "drush sql-connect --database=$database -r ${ROOT[$TEST]} -l $SITE_NAME")
 
 					echo "Pushing sql-dump-file to TEST server."
-					rsync -akq /var/tmp/$DUMPNAME ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$DUMPNAME 2> /dev/null || exit 1
+					rsync -akq /var/tmp/$DUMPNAME ${USER[$TEST]}@${HOST[$TEST]}:/var/tmp/$DUMPNAME || exit 1
 
 					echo "Drop all tables in the TEST database."
 					ALL_TABLES=$(ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -BNe \"show tables\" | tr '\n' ',' | sed -e 's/,$//'" 2> /dev/null);
@@ -745,12 +745,12 @@ function content_update {
 						ssh ${USER[$TEST]}@${HOST[$TEST]} "$TESTCONNECTION -e \"$DROP_COMMAND\"" || { echo "failed to drop all tables."; exit 1;}
 					fi
 					echo "Imports the sql-dump into the TEST database."
-					ssh ${USER[$TEST]}@${HOST[$TEST]} "gzcat /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" 2> /dev/null || exit 1
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "gzcat /var/tmp/$DUMPNAME | $TESTCONNECTION --silent" || exit 1
 
 					#Remove local file
-					rm /var/tmp/$DUMPNAME
+					rm /var/tmp/$DUMPNAME || false
 					#Remove from the test server
-					ssh ${USER[$TEST]}@${HOST[$TEST]} "rm $DUMPFILE"
+					ssh ${USER[$TEST]}@${HOST[$TEST]} "rm /var/tmp/$DUMPNAME"
 
 
 				else # local update from PROD/TEST
