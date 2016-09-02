@@ -655,10 +655,10 @@ function content_update {
 	diskspace=$(ssh -q ${USER[$REMOTE]}@${HOST[$REMOTE]} "df -k /var/tmp | tail -1 | awk '{ print \$4 }' ")
 
 	if [[ "$diskspace" < "$((1024*1024))" ]]; then
-		echo "The disk on the server is too full, $(( $diskspace / 1024 )) MB Avail. Clean up!"
+		echo "The disk on the server is too full, $diskspace kB Avail. Clean up!"
 		exit 1;
 	else
-		echo "It's $(( $diskspace / 1024 )) MB free disk space on the server..."
+		echo "It's $diskspace kB free disk space on the server..."
 	fi
 
 	for SITE in $PROJECT_LOCATION/sites/*/
