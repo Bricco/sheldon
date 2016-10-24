@@ -634,21 +634,6 @@ function content_update {
 	if [[ "$ARG_TEST" == "TRUE" || "$UPDATE_ALL" != "Y" ]]; then
 		DATABASES="default";
 	fi
-	#mysql_root_access;
-
-	if [[ "$(which ssh-copy-id)" && "$(which ssh-keygen)" && "$ARG_TEST" != "TRUE" ]];then
-
-		if [ ! $(ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${USER[$REMOTE]}@${HOST[$REMOTE]} 'echo TRUE 2>&1') ]; then
-		read -ep "You do not seem to have ssh keys to ${HOST[$REMOTE]}, do you want to add it? [Y/n]" ADD_KEYS
-			if [[ $ADD_KEYS == "Y" || $ADD_KEYS == "y" ]] ;then
-
-				if [[ ! -a ~/.ssh/id_dsa.pub ]]; then
-				 	ssh-keygen -t dsa
-				fi
-				ssh-copy-id -i ~/.ssh/id_dsa.pub ${USER[$REMOTE]}@${HOST[$REMOTE]}
-			fi
-		fi
-	fi
 
 	# Check amount of free disk space!
 	# Require 2gb
