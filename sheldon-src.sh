@@ -564,10 +564,10 @@ function deploy {
 			echo -e "\n\n####################\nRunning updates for $SITE_NAME \n"
 			if echo $(ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD status bootstrap Database") | grep -q -E "Connected|Successful" ; then
 
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 1 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'elysia_cron_disabled' 1 --exact --yes"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD fra --yes"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD updb --yes"
-				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'maintenance_mode' 0 --exact --yes && $DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
+				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD vset 'elysia_cron_disabled' 0 --exact --yes"
 				ssh ${USER[$REMOTE]}@${HOST[$REMOTE]} "$DRUSH_CMD cc all"
 
         echo -e "\n\n####################\nImporting language files for $SITE_NAME \n"
