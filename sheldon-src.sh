@@ -241,7 +241,7 @@ function build_drupal {
 
 	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
 	  echo "
-	  Bulding $PROJECT.make...
+	  Building $PROJECT.make...
 		"
 	  drush make $PROJECT.make tmp > /dev/null || exit 1
 
