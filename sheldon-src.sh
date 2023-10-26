@@ -234,12 +234,15 @@ function build_drupal {
 	fi
 
 	## DRUSH MAKE
+	
+	CURRENT_BRANCH=$(git branch --show-current)
+	CACHE_FILE_PATH=~/.sheldoncache/$PROJECT-$CURRENT_BRANCH.tar.gz
 
 	rm -rf tmp || true
 
-	if [[ ~/.sheldoncache/$PROJECT.tar.gz -ot $PROJECT.make ]] || [[ -e composer.json && ~/.sheldoncache/$PROJECT.tar.gz -ot composer.json ]]; then
+	if [[ $CACHE_FILE_PATH -ot $PROJECT.make ]] || [[ -e composer.json && $CACHE_FILE_PATH -ot composer.json ]]; then
 
-	  rm ~/.sheldoncache/$PROJECT.tar.gz || true
+	  rm $CACHE_FILE_PATH || true
 	  echo "
 	  Building $PROJECT.make...
 		"
@@ -259,10 +262,10 @@ function build_drupal {
 	  fi
 	  echo "Drush make complete."
 	  mkdir -p ~/.sheldoncache
-	  tar cfz  ~/.sheldoncache/$PROJECT.tar.gz tmp
+	  tar cfz  $CACHE_FILE_PATH tmp
 	else
 	  echo -e "\nMake file not changed since last build, fetching from cache.\n"
-		tar xf ~/.sheldoncache/$PROJECT.tar.gz
+		tar xf $CACHE_FILE_PATH
 	fi
 
 	echo "Copy custom profiles, modules, themes, .htaccess, robots.txt etc."
